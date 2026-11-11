@@ -175,6 +175,7 @@ def default_settings():
         "noise_dur": 2.0,
         "bitrate": "192k",
         "last_dir": "",
+        "output_dir": "",
     }
 
 
@@ -216,6 +217,9 @@ def migrate_settings(raw):
     ld = raw.get("last_dir")
     if isinstance(ld, str) and os.path.isdir(ld):
         s["last_dir"] = ld
+    od = raw.get("output_dir")
+    if isinstance(od, str) and os.path.isdir(od):
+        s["output_dir"] = od
     return s
 
 
@@ -408,6 +412,19 @@ def format_report(rows):
 def container_flags(dst):
     ext = os.path.splitext(dst)[1].lower()
     return ["-movflags", "+faststart"] if ext in (".mp4", ".mov", ".m4v") else []
+
+
+def audio_args(dst, bitrate="192k"):
+    ext = os.path.splitext(dst)[1].lower()
+    if ext == ".wav":
+        return ["-c:a", "pcm_s16le"]
+    if ext == ".mp3":
+        return ["-c:a", "libmp3lame", "-b:a", bitrate]
+    if ext == ".flac":
+        return ["-c:a", "flac"]
+    if ext == ".ogg":
+        return ["-c:a", "libvorbis", "-b:a", bitrate]
+    return ["-c:a", "aac", "-b:a", bitrate]
 
 
 def video_args(has_video, video_denoise):

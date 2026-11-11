@@ -12,7 +12,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINE_SCRIPT = os.path.join(HERE, "denoise_video.py")
-APP_TITLE = ""
+APP_TITLE = "โปรแกรมตัดเสียงรบกวน & บันทึกเสียง (Denoise & Audio Recorder)"
 
 
 def _fatal(msg):
@@ -34,15 +34,29 @@ except ImportError:
     _fatal("ไม่พบไฟล์ denoise_common.py ในโฟลเดอร์เดียวกับโปรแกรมนี้\n"
            "กรุณาคัดลอกไฟล์ทั้งหมดของโปรแกรมไปไว้ด้วยกัน")
 
+try:
+    import audio_recorder
+except ImportError:
+    audio_recorder = None
+
 PREVIEW_SECONDS = 300
 
 
 # ============================================================ logic (ไม่ใช้ tkinter)
-def default_output(src, preview=False):
+def default_output(src, preview=False, target_dir=None):
+    if not src:
+        return ""
     base, ext = os.path.splitext(src)
-    if ext.lower() in C.AUDIO_ONLY_EXT:
-        ext = ".m4a"
-    return f"{base}_{'preview' if preview else 'denoised'}{ext or '.mp4'}"
+    filename = os.path.basename(base)
+    ext_lower = ext.lower()
+    if ext_lower in C.AUDIO_ONLY_EXT:
+        out_ext = ext_lower if ext_lower in (".wav", ".mp3", ".flac", ".m4a") else ".m4a"
+    else:
+        out_ext = ext or ".mp4"
+    out_name = f"{filename}_{'preview' if preview else 'denoised'}{out_ext}"
+    if target_dir and str(target_dir).strip():
+        return os.path.join(str(target_dir).strip(), out_name)
+    return os.path.join(os.path.dirname(src), out_name)
 
 
 def build_command(o, src, dst):
@@ -218,21 +232,31 @@ def _drop_title_icon_slot(root):
         pass
 
 
-def set_blank_icon(root, tk):
-    """ซ่อนไอคอนขนนกของ Tk ด้วยไอคอนโปร่งใส"""
+def set_app_icon(root, tk):
+    """ตั้งค่าไอคอนโปรแกรมสำหรับ Title bar และ Taskbar ด้วย icon.ico ของโปรเจกต์"""
     try:
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        ico_path = os.path.join(base_dir, "icon.ico")
+        if not os.path.isfile(ico_path):
+            ico_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+
         if os.name == "nt":
-            path = os.path.join(tempfile.gettempdir(), "denoise_blank.ico")
-            hdr = struct.pack("<HHH", 0, 1, 1)
-            entry = struct.pack("<BBBBHHII", 1, 1, 0, 0, 1, 32, 48, 22)
-            bmp = struct.pack("<IiiHHIIiiII", 40, 1, 2, 1, 32, 0, 0, 0, 0, 0, 0)
-            data = hdr + entry + bmp + b"\x00\x00\x00\x00" + b"\xff\x00\x00\x00"
-            with open(path, "wb") as fh:
-                fh.write(data)
-            root.iconbitmap(default=path)
-            root.after(0, lambda: _drop_title_icon_slot(root))
-        else:
-            root.iconphoto(True, tk.PhotoImage(width=1, height=1))
+            import ctypes
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nosieprogram.denoise.gui")
+            except Exception:
+                pass
+            if os.path.isfile(ico_path):
+                root.iconbitmap(default=ico_path)
+                return
+        elif os.path.isfile(ico_path):
+            try:
+                from PIL import Image, ImageTk
+                img = ImageTk.PhotoImage(Image.open(ico_path))
+                root.iconphoto(True, img)
+                return
+            except Exception:
+                pass
     except Exception:  # noqa: BLE001
         pass
 
@@ -246,24 +270,101 @@ def open_path(path):
         subprocess.Popen(["xdg-open", path])
 
 
+def enable_high_dpi():
+    """เปิดใช้งาน High-DPI Awareness บน Windows ให้ UI และฟอนต์คมชัดระดับพิกเซลแท้ (ไม่เบลอจาก Bitmap scaling)"""
+    if os.name == "nt":
+        try:
+            import ctypes
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-Monitor DPI Aware v2
+            except Exception:
+                try:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # System DPI Aware
+                except Exception:
+                    ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
+def configure_sharp_ui(root):
+    """ปรับแต่งฟอนต์ สไตล์ และธีมของระบบให้คมชัดระดับ Subpixel Typography"""
+    import tkinter.font as tkfont
+    from tkinter import ttk
+
+    available = set(tkfont.families(root))
+    if "Leelawadee UI" in available:
+        ui_font = "Leelawadee UI"
+    elif "Segoe UI" in available:
+        ui_font = "Segoe UI"
+    else:
+        ui_font = "Tahoma"
+
+    mono_font = "Consolas" if "Consolas" in available else "Courier New"
+
+    # ปรับ Named Fonts ทั้งหมดของ Tkinter
+    for name, sz, wt in (
+        ("TkDefaultFont", 10, "normal"),
+        ("TkTextFont", 10, "normal"),
+        ("TkMenuFont", 10, "normal"),
+        ("TkHeadingFont", 10, "bold"),
+        ("TkCaptionFont", 9, "normal"),
+        ("TkSmallCaptionFont", 9, "normal"),
+        ("TkIconFont", 10, "normal"),
+        ("TkTooltipFont", 9, "normal"),
+    ):
+        try:
+            f = tkfont.nametofont(name)
+            f.configure(family=ui_font, size=sz, weight=wt)
+        except Exception:
+            pass
+
+    try:
+        f = tkfont.nametofont("TkFixedFont")
+        f.configure(family=mono_font, size=10)
+    except Exception:
+        pass
+
+    # ปรับแต่ง ttk Style เพื่อให้ขอบ คอนทราสต์ และช่องไฟคมชัด สบายตา
+    style = ttk.Style(root)
+    if "vista" in style.theme_names():
+        style.theme_use("vista")
+    elif "clam" in style.theme_names():
+        style.theme_use("clam")
+
+    style.configure("TLabelframe", padding=(10, 6))
+    style.configure("TLabelframe.Label", font=(ui_font, 10, "bold"), foreground="#0f172a")
+    style.configure("TButton", font=(ui_font, 10), padding=(10, 4))
+    style.configure("TLabel", font=(ui_font, 10))
+    style.configure("TRadiobutton", font=(ui_font, 10))
+    style.configure("TCheckbutton", font=(ui_font, 10))
+    style.configure("TEntry", font=(ui_font, 10), padding=(6, 4))
+    style.configure("TCombobox", font=(ui_font, 10), padding=(6, 4))
+    style.configure("TProgressbar", thickness=15)
+
+    return ui_font, mono_font
+
+
 def main():
     if sys.version_info < C.MIN_PYTHON:
         _fatal("ต้องใช้ Python %d.%d ขึ้นไป" % C.MIN_PYTHON)
+    enable_high_dpi()
     import tkinter as tk
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
     root = tk.Tk()
     root.title(APP_TITLE)
-    set_blank_icon(root, tk)
-    root.minsize(660, 760)
+    set_app_icon(root, tk)
+    ui_font, mono_font = configure_sharp_ui(root)
+    root.minsize(700, 800)
     pad = {"padx": 10, "pady": 4}
 
     events = queue.Queue()
-    state = {"job": None, "t0": 0.0, "out": "", "user_presets": set()}
+    state = {"job": None, "t0": 0.0, "out": "", "user_presets": set(), "rec_path": ""}
     cfg = C.load_settings()
     presets = {}
 
     v_in, v_out = tk.StringVar(), tk.StringVar()
+    v_out_dir = tk.StringVar(value=cfg.get("output_dir") or "")
     v_info = tk.StringVar(value="ยังไม่ได้เลือกไฟล์")
     v_preset = tk.StringVar(value=cfg["preset"])
     v_engine = tk.StringVar(value=cfg["engine"])
@@ -275,42 +376,179 @@ def main():
     v_status = tk.StringVar(value="พร้อมทำงาน")
     v_time = tk.StringVar(value="")
 
-    # ---- 1. ไฟล์
-    f = ttk.LabelFrame(root, text="1. เลือกไฟล์")
+    # ---- 1. อัดเสียงจากไมโครโฟน
+    rec_inst = audio_recorder.AudioRecorder() if audio_recorder else None
+    v_rec_status = tk.StringVar(
+        value="พร้อมอัดเสียง" if rec_inst and rec_inst.is_available()[0] else "ไมโครโฟนไม่พร้อมใช้งาน")
+    v_rec_dur = tk.StringVar(value="00:00")
+
+    f_rec = ttk.LabelFrame(root, text="1. อัดเสียงจากไมโครโฟน (บันทึกเสียงสด)")
+    f_rec.pack(fill="x", **pad)
+    f_rec.columnconfigure(2, weight=1)
+
+    r_row1 = ttk.Frame(f_rec)
+    r_row1.pack(fill="x", padx=6, pady=3)
+
+    b_rec_start = ttk.Button(r_row1, text="🔴 เริ่มอัดเสียง")
+    b_rec_start.pack(side="left", padx=(0, 4))
+    b_rec_stop = ttk.Button(r_row1, text="⏹️ หยุด", state="disabled")
+    b_rec_stop.pack(side="left", padx=4)
+    b_rec_play = ttk.Button(r_row1, text="▶️ ฟังเสียงที่อัด", state="disabled")
+    b_rec_play.pack(side="left", padx=4)
+    b_rec_use = ttk.Button(r_row1, text="⚡ นำเข้าเพื่อตัด noise ทันที", state="disabled")
+    b_rec_use.pack(side="left", padx=4)
+    b_rec_save = ttk.Button(r_row1, text="💾 บันทึกเสียงดิบ...", state="disabled")
+    b_rec_save.pack(side="left", padx=4)
+
+    r_row2 = ttk.Frame(f_rec)
+    r_row2.pack(fill="x", padx=6, pady=(0, 4))
+    ttk.Label(r_row2, text="ระดับเสียงไมค์:").pack(side="left")
+    rec_meter = ttk.Progressbar(r_row2, maximum=100, length=120)
+    rec_meter.pack(side="left", padx=6)
+    ttk.Label(r_row2, text="เวลาอัด:").pack(side="left", padx=(6, 2))
+    ttk.Label(r_row2, textvariable=v_rec_dur, font=("TkDefaultFont", 9, "bold")).pack(side="left")
+    ttk.Label(r_row2, text=" | ").pack(side="left", padx=4)
+    ttk.Label(r_row2, textvariable=v_rec_status, foreground="#555").pack(side="left")
+
+    def update_rec_ui():
+        if rec_inst and rec_inst.is_recording:
+            dur = rec_inst.get_duration()
+            mins, secs = divmod(int(dur), 60)
+            v_rec_dur.set(f"{mins:02d}:{secs:02d}")
+            peak, _ = rec_inst.get_levels()
+            rec_meter["value"] = min(100, int(peak * 120))
+            root.after(100, update_rec_ui)
+        else:
+            rec_meter["value"] = 0
+
+    def on_rec_start():
+        if not rec_inst:
+            return messagebox.showerror("ข้อผิดพลาด", "ไม่พบโมดูลอัดเสียง sounddevice")
+        ok, msg = rec_inst.start_recording()
+        if not ok:
+            return messagebox.showerror("เปิดไมค์ไม่ได้", msg)
+        b_rec_start.config(state="disabled")
+        b_rec_stop.config(state="normal")
+        b_rec_play.config(state="disabled")
+        b_rec_use.config(state="disabled")
+        b_rec_save.config(state="disabled")
+        v_rec_status.set("กำลังบันทึกเสียง...")
+        v_rec_dur.set("00:00")
+        root.after(100, update_rec_ui)
+
+    def on_rec_stop():
+        if not rec_inst:
+            return
+        ok, msg = rec_inst.stop_recording()
+        b_rec_start.config(state="normal")
+        b_rec_stop.config(state="disabled")
+        if not ok:
+            v_rec_status.set(msg)
+            return messagebox.showwarning("แจ้งเตือน", msg)
+        v_rec_status.set(msg)
+        # บันทึกลงไฟล์ชั่วคราว
+        tmp_wav = os.path.join(tempfile.gettempdir(), f"rec_{int(time.time())}.wav")
+        saved, smsg = rec_inst.save_to_file(tmp_wav)
+        if saved:
+            state["rec_path"] = tmp_wav
+            b_rec_play.config(state="normal")
+            b_rec_use.config(state="normal")
+            b_rec_save.config(state="normal")
+
+    def on_rec_play():
+        p = state.get("rec_path")
+        if p and os.path.isfile(p):
+            open_path(p)
+
+    def on_rec_use():
+        p = state.get("rec_path")
+        if not p or not os.path.isfile(p):
+            return
+        v_in.set(p)
+        v_out.set(default_output(p, v_prev.get(), v_out_dir.get()))
+        v_info.set(f"เสียงที่อัดสด ({v_rec_dur.get()} นาที)")
+        threading.Thread(
+            target=lambda path=p: events.put(("info", path, get_duration(path))),
+            daemon=True).start()
+        messagebox.showinfo("นำเข้าสำเร็จ", "นำเข้าเสียงที่บันทึกเป็นไฟล์ต้นฉบับเรียบร้อยแล้ว\nคุณสามารถกด 'เริ่มลด noise' ได้ทันที")
+
+    def on_rec_save():
+        p = state.get("rec_path")
+        if not p or not os.path.isfile(p):
+            return
+        dest = filedialog.asksaveasfilename(
+            title="บันทึกเสียงดิบเป็นไฟล์",
+            initialfile=f"voice_record_{time.strftime('%Y%m%d_%H%M%S')}.wav",
+            initialdir=v_out_dir.get() or cfg["last_dir"] or None,
+            filetypes=[("WAV Audio", "*.wav")])
+        if dest:
+            shutil.copy2(p, dest)
+            messagebox.showinfo("บันทึกแล้ว", f"บันทึกไฟล์เสียงสำเร็จ:\n{dest}")
+
+    b_rec_start.config(command=on_rec_start)
+    b_rec_stop.config(command=on_rec_stop)
+    b_rec_play.config(command=on_rec_play)
+    b_rec_use.config(command=on_rec_use)
+    b_rec_save.config(command=on_rec_save)
+
+    # ---- 2. เลือกไฟล์และโฟลเดอร์บันทึก
+    f = ttk.LabelFrame(root, text="2. เลือกไฟล์และโฟลเดอร์บันทึก")
     f.pack(fill="x", **pad)
     f.columnconfigure(1, weight=1)
-    ttk.Label(f, text="วิดีโอต้นฉบับ").grid(row=0, column=0, sticky="w", padx=6, pady=3)
+    ttk.Label(f, text="ไฟล์ต้นฉบับ").grid(row=0, column=0, sticky="w", padx=6, pady=3)
     ttk.Entry(f, textvariable=v_in).grid(row=0, column=1, sticky="ew", padx=6)
-    ttk.Label(f, text="บันทึกเป็น").grid(row=1, column=0, sticky="w", padx=6, pady=3)
-    ttk.Entry(f, textvariable=v_out).grid(row=1, column=1, sticky="ew", padx=6)
+    
+    ttk.Label(f, text="โฟลเดอร์บันทึก").grid(row=1, column=0, sticky="w", padx=6, pady=3)
+    ttk.Entry(f, textvariable=v_out_dir).grid(row=1, column=1, sticky="ew", padx=6)
+
+    ttk.Label(f, text="บันทึกไฟล์เป็น").grid(row=2, column=0, sticky="w", padx=6, pady=3)
+    ttk.Entry(f, textvariable=v_out).grid(row=2, column=1, sticky="ew", padx=6)
     ttk.Label(f, textvariable=v_info, foreground="#666").grid(
-        row=2, column=1, sticky="w", padx=6, pady=(0, 4))
+        row=3, column=1, sticky="w", padx=6, pady=(0, 4))
 
     def pick_in():
         p = filedialog.askopenfilename(
-            title="เลือกวิดีโอ", initialdir=cfg["last_dir"] or None,
-            filetypes=[("วิดีโอ/เสียง", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.ts *.flv "
-                                       "*.mp3 *.wav *.m4a *.flac"), ("ทุกไฟล์", "*.*")])
+            title="เลือกไฟล์เสียงหรือวิดีโอ", initialdir=cfg["last_dir"] or None,
+            filetypes=[("วิดีโอและเสียงทั้งหมด", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.ts *.flv "
+                                             "*.mp3 *.wav *.m4a *.flac *.ogg *.aac"),
+                       ("ไฟล์เสียง", "*.wav *.mp3 *.m4a *.flac *.ogg *.aac"),
+                       ("ไฟล์วิดีโอ", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.ts *.flv"),
+                       ("ทุกไฟล์", "*.*")])
         if p:
             cfg["last_dir"] = os.path.dirname(p)
             v_in.set(p)
-            v_out.set(default_output(p, v_prev.get()))
+            v_out.set(default_output(p, v_prev.get(), v_out_dir.get()))
             v_info.set("กำลังอ่านข้อมูลไฟล์...")
             threading.Thread(
                 target=lambda path=p: events.put(("info", path, get_duration(path))),
                 daemon=True).start()
 
+    def pick_dir():
+        d = filedialog.askdirectory(
+            title="เลือกโฟลเดอร์ที่จะบันทึกไฟล์ผลลัพธ์",
+            initialdir=v_out_dir.get() or cfg["last_dir"] or None)
+        if d:
+            v_out_dir.set(d)
+            if v_in.get():
+                v_out.set(default_output(v_in.get(), v_prev.get(), d))
+
     def pick_out():
-        p = filedialog.asksaveasfilename(title="บันทึกเป็น", initialfile=os.path.basename(v_out.get()),
-                                         initialdir=cfg["last_dir"] or None)
+        init_dir = v_out_dir.get() or cfg["last_dir"] or (os.path.dirname(v_out.get()) if v_out.get() else None)
+        p = filedialog.asksaveasfilename(
+            title="ระบุชื่อไฟล์และตำแหน่งที่จะบันทึก",
+            initialfile=os.path.basename(v_out.get()) if v_out.get() else "output_denoised.wav",
+            initialdir=init_dir or None,
+            filetypes=[("ไฟล์ผลลัพธ์", "*.wav *.mp3 *.m4a *.mp4 *.flac *.mkv"), ("ทุกไฟล์", "*.*")])
         if p:
             v_out.set(p)
+            v_out_dir.set(os.path.dirname(p))
 
-    ttk.Button(f, text="เลือก...", command=pick_in).grid(row=0, column=2, padx=6)
-    ttk.Button(f, text="เลือก...", command=pick_out).grid(row=1, column=2, padx=6)
+    ttk.Button(f, text="เลือกไฟล์...", command=pick_in).grid(row=0, column=2, padx=6)
+    ttk.Button(f, text="เลือกโฟลเดอร์...", command=pick_dir).grid(row=1, column=2, padx=6)
+    ttk.Button(f, text="ระบุชื่อ...", command=pick_out).grid(row=2, column=2, padx=6)
 
-    # ---- 2. ตั้งค่า (สร้างจากรายการใน denoise_common)
-    s = ttk.LabelFrame(root, text="2. ตั้งค่า")
+    # ---- 3. ตั้งค่า (สร้างจากรายการใน denoise_common)
+    s = ttk.LabelFrame(root, text="3. ตั้งค่าการลด noise")
     s.pack(fill="x", **pad)
     s.columnconfigure(1, weight=1)
 
@@ -389,9 +627,11 @@ def main():
         lb = ttk.Label(s, text=spec["label"])
         lb.grid(row=row, column=0, sticky="w", padx=6)
         sc = tk.Scale(s, variable=v_vals[key], from_=spec["min"], to=spec["max"],
-                      resolution=spec["step"], orient="horizontal")
+                      resolution=spec["step"], orient="horizontal",
+                      font=(ui_font, 9), highlightthickness=0, bd=1,
+                      sliderrelief="raised", sliderlength=20, activebackground="#3b82f6")
         sc.grid(row=row, column=1, sticky="ew", padx=6)
-        ht = ttk.Label(s, text=spec["hint"], foreground="#666")
+        ht = ttk.Label(s, text=spec["hint"], foreground="#555")
         ht.grid(row=row, column=2, sticky="w", padx=6)
         sliders.append(sc)
         opt_rows[key] = (lb, sc, ht)
@@ -415,7 +655,7 @@ def main():
     ttk.Checkbutton(s, text=f"ทดสอบเฉพาะ {PREVIEW_SECONDS // 60} นาทีแรกก่อน (แนะนำ ใช้ปรับค่าให้เร็ว)",
                     variable=v_prev,
                     command=lambda: v_in.get() and v_out.set(
-                        default_output(v_in.get(), v_prev.get()))
+                        default_output(v_in.get(), v_prev.get(), v_out_dir.get()))
                     ).grid(row=nrow + 2, column=0, columnspan=3, sticky="w", padx=6, pady=3)
 
     def on_engine_change(*_):
@@ -427,14 +667,16 @@ def main():
 
     v_engine.trace_add("write", on_engine_change)
 
-    # ---- 3. ประมวลผล
-    r = ttk.LabelFrame(root, text="3. ประมวลผล")
+    # ---- 4. ประมวลผล
+    r = ttk.LabelFrame(root, text="4. ประมวลผล")
     r.pack(fill="both", expand=True, **pad)
     bar = ttk.Progressbar(r, maximum=100)
     bar.pack(fill="x", padx=6, pady=(6, 2))
     ttk.Label(r, textvariable=v_status).pack(anchor="w", padx=6)
-    ttk.Label(r, textvariable=v_time, foreground="#666").pack(anchor="w", padx=6)
-    logbox = tk.Text(r, height=6, state="disabled", wrap="word")
+    ttk.Label(r, textvariable=v_time, foreground="#555").pack(anchor="w", padx=6)
+    logbox = tk.Text(r, height=6, state="disabled", wrap="word",
+                     font=(mono_font, 9), bg="#f8fafc", fg="#1e293b",
+                     relief="solid", bd=1, padx=6, pady=4)
     logbox.pack(fill="both", expand=True, padx=6, pady=4)
 
     def log(msg):
@@ -453,9 +695,9 @@ def main():
     b_cancel.pack(side="left", padx=6)
     b_check = ttk.Button(bf, text="ตรวจระบบ")
     b_check.pack(side="left")
-    b_folder = ttk.Button(bf, text="เปิดโฟลเดอร์", state="disabled")
+    b_folder = ttk.Button(bf, text="เปิดโฟลเดอร์บันทึก", state="disabled")
     b_folder.pack(side="right")
-    b_play = ttk.Button(bf, text="เปิดไฟล์", state="disabled")
+    b_play = ttk.Button(bf, text="เปิดไฟล์ผลลัพธ์", state="disabled")
     b_play.pack(side="right", padx=6)
 
     def set_running(running):
@@ -486,12 +728,12 @@ def main():
             "video_denoise": o["video_denoise"], "preview": o["preview"],
             "noise_manual": o["noise_manual"], "noise_start": o["noise_start"],
             "noise_dur": o["noise_dur"], "bitrate": o["bitrate"],
-            "last_dir": cfg["last_dir"]})
+            "last_dir": cfg["last_dir"], "output_dir": v_out_dir.get()})
 
     def start():
         src, dst = v_in.get().strip(), v_out.get().strip()
         if not os.path.isfile(src):
-            return messagebox.showwarning("ยังไม่พร้อม", "กรุณาเลือกไฟล์วิดีโอต้นฉบับ")
+            return messagebox.showwarning("ยังไม่พร้อม", "กรุณาเลือกไฟล์เสียงหรือวิดีโอต้นฉบับ")
         if not dst:
             return messagebox.showwarning("ยังไม่พร้อม", "กรุณาระบุชื่อไฟล์ที่จะบันทึก")
         if os.path.abspath(src) == os.path.abspath(dst):
@@ -500,6 +742,13 @@ def main():
             opts = collect()
         except tk.TclError:
             return messagebox.showwarning("ค่าไม่ถูกต้อง", "ช่องวินาทีของช่วง noise ต้องเป็นตัวเลข")
+        # สร้างโฟลเดอร์ปลายทางถ้ายังไม่มี
+        out_folder = os.path.dirname(os.path.abspath(dst))
+        if out_folder and not os.path.exists(out_folder):
+            try:
+                os.makedirs(out_folder, exist_ok=True)
+            except OSError as e:
+                return messagebox.showerror("สร้างโฟลเดอร์ไม่ได้", f"ไม่สามารถสร้างโฟลเดอร์บันทึก:\n{e}")
         if os.path.exists(dst) and not messagebox.askyesno(
                 "ไฟล์มีอยู่แล้ว", f"{os.path.basename(dst)} มีอยู่แล้ว เขียนทับหรือไม่?"):
             return

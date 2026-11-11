@@ -1,0 +1,395 @@
+AutoBuild report — 2026-11-10 12:21:12
+OS: Windows-11-10.0.26300-SP0 | Python 3.12.0 | C:\Program Files\Python312\python.exe
+ผลแต่ละขั้น: สแกนโปรเจกต์อัตโนมัติ = ok, ตรวจ Python และไฟล์โปรเจกต์ = ok, ติดตั้งไลบรารี Python (ทีละตัว) = ok, ติดตั้งเครื่องมือเสริม = ok, Windows Defender (กัน EXE ถูกกักกัน) = skip, Build ด้วย PyInstaller = ok, ทดสอบเปิดโปรแกรม = ok, สร้างตัวติดตั้ง Setup.exe = ok
+
+======================================================================
+ไลบรารีที่ใช้ (เวอร์ชันในเครื่องนี้)
+======================================================================
+pyinstaller==6.21.0, numpy==2.5.2, pillow==12.3.0, scipy==1.18.0
+
+======================================================================
+ค่า config ที่ใช้จริง
+======================================================================
+{
+  "app_name": "denoise_gui",
+  "version": "1.1.0",
+  "entry_script": "denoise_gui.py",
+  "icon": "icon.ico",
+  "onefile": true,
+  "windowed": true,
+  "min_python": [
+    3,
+    9
+  ],
+  "required_files": [
+    "denoise_gui.py",
+    "icon.ico"
+  ],
+  "add_data": [
+    "icon.ico;."
+  ],
+  "add_binary": [],
+  "add_binary_first_found": [],
+  "hidden_imports": [
+    "PIL",
+    "scipy"
+  ],
+  "collect_all": [],
+  "extra_pyinstaller_args": [],
+  "requirements_file": null,
+  "python_packages": [
+    {
+      "module": "PyInstaller",
+      "pip": "pyinstaller",
+      "required": true,
+      "desc": "ตัว build EXE"
+    },
+    {
+      "module": "numpy",
+      "pip": "numpy",
+      "required": true,
+      "desc": "พบใน denoise_spectral.py"
+    },
+    {
+      "module": "PIL",
+      "pip": "pillow",
+      "required": false,
+      "desc": "ไม่บังคับ · พบใน denoise_gui.py"
+    },
+    {
+      "module": "scipy",
+      "pip": "scipy",
+      "required": false,
+      "desc": "ไม่บังคับ · พบใน denoise_spectral.py"
+    }
+  ],
+  "external_tools": [
+    {
+      "name": "ffmpeg",
+      "desc": "ประมวลผลวิดีโอ/เสียง",
+      "winget_id": "Gyan.FFmpeg",
+      "commands": [
+        "ffmpeg"
+      ]
+    }
+  ],
+  "test_launch_seconds": 8,
+  "runtime_log": true,
+  "auto_fix": true,
+  "defender": {
+    "check": true,
+    "offer_exclusion": true
+  },
+  "max_auto_retries": 2,
+  "extra_hidden_imports": [],
+  "extra_add_data": [],
+  "extra_collect_all": [],
+  "build_target": "both",
+  "project_type": "python",
+  "builder": {},
+  "install_commands": null,
+  "build_commands": null,
+  "installer": {
+    "enabled": true,
+    "iss_file": "installer.iss",
+    "output_dir": "installer_output",
+    "output_glob": "*Setup*.exe"
+  },
+  "help_hints": {
+    "run_without_build": "run.bat"
+  }
+}
+
+======================================================================
+ข้อความบนหน้าจอตลอดการรัน
+======================================================================
+
+  ══════════════════════════════════════════════════════════════
+   เลือกโฟลเดอร์หรือไฟล์โปรเจกต์ที่ต้องการ Build
+  ══════════════════════════════════════════════════════════════
+
+  ตำแหน่งปัจจุบัน: c:\Users\user\Desktop\myproject2\Build
+
+  รายการโปรเจกต์และโฟลเดอร์ที่พบ:
+    [1] 📁 assets                 [โฟลเดอร์]
+        Path: c:\Users\user\Desktop\myproject2\Build\assets
+    [2] 📁 code-bots              [Python (PyInstaller)]
+        Path: c:\Users\user\Desktop\myproject2\code-bots
+    [3] 📁 converter              [Python (PyInstaller)]
+        Path: c:\Users\user\Desktop\myproject2\converter
+    [4] 📁 docconvert             [Python (PyInstaller)]
+        Path: c:\Users\user\Desktop\myproject2\docconvert
+    [5] 📁 Exel                   [เว็บ Node.js (npm run build)]
+        Path: c:\Users\user\Desktop\myproject2\Exel
+    [6] 📁 Nosieprogarm           [Python (PyInstaller)]
+        Path: c:\Users\user\Desktop\myproject2\Nosieprogarm
+    ──────────────────────────────────────────────────────────
+    [S] 🔍 ค้นหาโฟลเดอร์/โปรเจกต์ด้วยคำค้นหา (Keyword Search)
+    [B] 📂 เปลี่ยนโฟลเดอร์ค้นหา / ย้ายไปยังโฟลเดอร์อื่น (Browse)
+    [M] 📝 พิมพ์หรือวาง Path โฟลเดอร์/ไฟล์ด้วยตัวเอง (Manual Path)
+    [Q] 🚪 ยกเลิกและออกจากโปรแกรม (Exit)
+
+  💡 คำแนะนำ & ตัวอย่างคำสั่ง:
+     คุณสามารถระบุโฟลเดอร์หรือค้นหาได้โดยตรงผ่านคำสั่ง:
+     b choose                     (เปิดเมนูนี้)
+     b find <คำค้นหา>             (ค้นหาตามชื่อ เช่น b find convert)
+     b --project "<โฟลเดอร์>"      (ระบุโฟลเดอร์โดยตรง)
+     b pack                       (แพ็ครวมเครื่องมือแจกจ่ายเป็นไฟล์ ZIP)
+
+  ────────────────────────────────────────────────────────────
+  โปรเจกต์ที่เลือก: c:\Users\user\Desktop\myproject2\Nosieprogarm
+  ชนิดโปรเจกต์: Python (PyInstaller)
+  ────────────────────────────────────────────────────────────
+
+  เลือกรูปแบบผลลัพธ์ที่ต้องการ build:
+    [1] ไฟล์ .exe (Standalone — รันได้ทันที ไม่ต้องติดตั้ง) [ค่าเริ่มต้น]
+    [2] ไฟล์ Setup.exe (ตัวติดตั้ง Inno Setup — สำหรับแจกจ่าย ติดตั้งลงเครื่อง)
+    [3] สร้างทั้งคู่ (ทั้งไฟล์ .exe และตัวติดตั้ง Setup.exe)
+
+  Auto Build — สแกนโปรเจกต์และ build อัตโนมัติ
+
+  โปรเจกต์: c:\Users\user\Desktop\myproject2\Nosieprogarm
+  ระบบจะทำทีละขั้นตอน ถ้าขั้นไหนต้องตัดสินใจจะถามก่อนเสมอ
+
+  ขั้นตอนที่ 1/8  สแกนโปรเจกต์อัตโนมัติ
+  ──────────────────────────────────────────────────────────
+  ✓ ชนิดโปรเจกต์: Python (PyInstaller)
+  ✓ สแกนไฟล์ Python 5 ไฟล์
+  ✓ ไฟล์หลัก: denoise_gui.py
+  ✓ ชื่อแอป: denoise_gui   เวอร์ชัน: 1.1.0
+  ✓ โปรแกรมหน้าต่าง (GUI: tkinter) → build แบบไม่มีหน้าต่าง console
+  ✓ ไลบรารีภายนอก 3 ตัว (จำเป็น 1 · ไม่บังคับ 2): PIL, numpy, scipy
+  ✓ ไฟล์ข้อมูลที่จะแนบ: icon.ico
+  ✓ ไอคอน: icon.ico  (🦊 Clever Tech Fox (สุนัขจิ้งจอกอัจฉริยะ))
+  ✓ เครื่องมือเสริมที่โค้ดเรียกใช้: ffmpeg
+  – ไม่พบไฟล์ .iss — ไม่สร้างตัวติดตั้ง
+
+  ขั้นตอนที่ 2/8  ตรวจ Python และไฟล์โปรเจกต์
+  ──────────────────────────────────────────────────────────
+  Python 3.12.0  (C:\Program Files\Python312\python.exe)
+  พบไฟล์โปรเจกต์ครบ: denoise_gui.py, icon.ico
+
+  ขั้นตอนที่ 3/8  ติดตั้งไลบรารี Python (ทีละตัว)
+  ──────────────────────────────────────────────────────────
+  ✓ pyinstaller    ตัว build EXE  มีอยู่แล้ว
+  ✓ numpy          พบใน denoise_spectral.py  มีอยู่แล้ว
+  ✓ pillow         ไม่บังคับ · พบใน denoise_gui.py  มีอยู่แล้ว
+  ✓ scipy          ไม่บังคับ · พบใน denoise_spectral.py  มีอยู่แล้ว
+
+  ขั้นตอนที่ 4/8  ติดตั้งเครื่องมือเสริม
+  ──────────────────────────────────────────────────────────
+  ✓ ffmpeg       ประมวลผลวิดีโอ/เสียง  มีอยู่แล้ว
+
+  ขั้นตอนที่ 5/8  Windows Defender (กัน EXE ถูกกักกัน)
+  ──────────────────────────────────────────────────────────
+  Windows Defender อาจสแกนตรวจสอบไฟล์ EXE ชั่วคราวขณะรันครั้งแรก
+  💡 หมายเหตุ: การเพิ่มข้อยกเว้นเป็นการยกเว้นเฉพาะโฟลเดอร์โปรเจกต์นี้เท่านั้น (ไม่มีการติดตั้งใบรับรองหรือแก้ระบบอื่น)
+     หากไม่ใช่ Admin หรือไม่มีรหัสผ่าน สามารถกด Enter เพื่อข้ามได้ทันที — ตัวโปรแกรมจะ build และทำงานได้ตามปกติ 100%
+
+ข้ามการตั้งค่า Defender — กำลังเริ่ม build ทันที
+
+  ขั้นตอนที่ 6/8  Build ด้วย PyInstaller
+  ──────────────────────────────────────────────────────────
+  แนบไอคอนลงไฟล์ EXE: icon.ico ✓
+  สร้างสำเร็จ: dist\denoise_gui.exe  (36.5 MB)
+
+SHA256: 28d39ec6d6e6649a037a0cc700c29e88cc4547ccfe3cd2ebb5bb005830d9588f
+
+(ใช้ยืนยันไฟล์เวลาส่งให้ Microsoft หรือแจ้ง IT ขออนุญาต)
+
+คำเตือน: PyInstaller หาโมดูลเหล่านี้ไม่เจอ (อาจทำให้ EXE พัง): _typeshed, cupy, cupy.cuda, dask.array, numpy._core.add, numpy._core.all, numpy._core.amax, numpy._core.amin
+
+ถ้า EXE ทำงานผิดปกติ สคริปต์จะอ่าน log ตอนทดสอบแล้วแก้ให้เอง
+
+  ขั้นตอนที่ 7/8  ทดสอบเปิดโปรแกรม
+  ──────────────────────────────────────────────────────────
+  เปิดโปรแกรมทดสอบประมาณ 8 วินาที (หน้าต่างจะโผล่ขึ้นมาแล้วปิดเอง)
+  ไฟล์ EXE ถูกสร้างสำเร็จแล้ว ✓
+  ⚠️  Windows 11 Smart App Control บล็อกการรันไฟล์ .exe ที่คอมไพล์ใหม่บนเครื่องนี้
+     (ข้อความ: 'An Application Control policy has blocked this file')
+     💡 ทางออกที่ 1 (แนะนำ - เปิดได้ทันที): ดับเบิลคลิก 'เปิดโปรแกรม_denoise_gui.vbs' ใน dist (ไม่โดนบล็อก 100%)
+     💡 ทางออกที่ 2 (หากต้องการดับเบิลคลิก .exe ตรงๆ): ไปที่ Windows Security > App & browser control > Smart App Control แล้วเลือกปิด (Off)
+
+  ขั้นตอนที่ 8/8  สร้างตัวติดตั้ง Setup.exe
+  ──────────────────────────────────────────────────────────
+  ไม่พบไฟล์ installer.iss — กำลังสร้างสคริปต์ตัวติดตั้ง Inno Setup ให้อัตโนมัติ
+  สร้างสคริปต์ Inno Setup เริ่มต้น: installer.iss
+  สร้างตัวติดตั้งสำเร็จ: installer_output\denoise_gui_Setup.exe  (38.2 MB)
+  ปลดล็อกความปลอดภัย (Unblock Mark-of-the-Web) ให้ตัวติดตั้งเรียบร้อยแล้ว ✓
+  SHA256: 89bdcececed64618f88c8d788f9324b0f85ab0c5d9f3d8d5006fc2a1ca486152
+
+  สรุปผลการทำงาน
+  ──────────────────────────────────────────────────────────
+  ✓  สแกนโปรเจกต์อัตโนมัติ
+  ✓  ตรวจ Python และไฟล์โปรเจกต์
+  ✓  ติดตั้งไลบรารี Python (ทีละตัว)
+  ✓  ติดตั้งเครื่องมือเสริม
+  –  Windows Defender (กัน EXE ถูกกักกัน)
+  ✓  Build ด้วย PyInstaller
+  ✓  ทดสอบเปิดโปรแกรม
+  ✓  สร้างตัวติดตั้ง Setup.exe
+  ──────────────────────────────────────────────────────────
+
+  ไฟล์ EXE (Standalone): c:\Users\user\Desktop\myproject2\Nosieprogarm\dist\denoise_gui.exe
+  ตัวติดตั้ง (Setup.exe): c:\Users\user\Desktop\myproject2\Nosieprogarm\installer_output\denoise_gui_Setup.exe
+
+
+======================================================================
+build_log (ท้าย 80 บรรทัด)
+======================================================================
+5976 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+5976 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+6385 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6474 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6487 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6487 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6606 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+7071 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+7526 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+7526 INFO: SetuptoolsInfo: initializing cached setuptools info...
+8553 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+8741 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+9998 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+10219 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+11948 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+12861 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+13265 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+13679 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+13901 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+14229 INFO: Analyzing hidden import 'scipy'
+14243 INFO: Processing standard module hook 'hook-scipy.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+15147 INFO: Processing standard module hook 'hook-pycparser.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+15334 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+15350 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15383 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15383 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+15399 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15399 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+15672 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15977 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+15977 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15987 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15987 INFO: Setuptools: 'backports' appears to be a partial setuptools-vendored copy - extending search paths to ['C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\setuptools\\_vendor\\backports', 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\backports']!
+15987 INFO: Processing pre-safe-import-module hook 'hook-backports.tarfile.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15987 INFO: Setuptools: 'backports.tarfile' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.backports.tarfile'!
+16085 INFO: Processing standard module hook 'hook-backports.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+16425 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+16425 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+17053 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+17053 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+17462 INFO: Processing module hooks (post-graph stage)...
+17473 WARNING: Hidden import "pycparser.lextab" not found!
+17473 WARNING: Hidden import "pycparser.yacctab" not found!
+17824 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+18110 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+18132 INFO: Performing binary vs. data reclassification (929 entries)
+18230 INFO: Looking for ctypes DLLs
+18300 INFO: Analyzing run-time hooks ...
+18300 INFO: Including custom run-time hook 'C:\\Users\\user\\AppData\\Local\\Temp\\denoise_gui_build_n8qytejm\\autobuild_runtime_hook.py'
+18316 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+18319 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+18325 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+18329 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+18330 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+18373 INFO: Creating base_library.zip...
+18410 INFO: Looking for dynamic libraries
+19301 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\scipy.libs', 'C:\\Users\\user\\AppData\\Roaming\\Python\\Python312\\site-packages\\numpy.libs']
+19301 INFO: Extra DLL search directories (PATH): []
+20247 INFO: Warnings written to C:\Users\user\AppData\Local\Temp\denoise_gui_build_n8qytejm\denoise_gui\warn-denoise_gui.txt
+20325 INFO: Graph cross-reference written to C:\Users\user\AppData\Local\Temp\denoise_gui_build_n8qytejm\denoise_gui\xref-denoise_gui.html
+20382 INFO: checking PYZ
+20382 INFO: Building PYZ because PYZ-00.toc is non existent
+20382 INFO: Building PYZ (ZlibArchive) C:\Users\user\AppData\Local\Temp\denoise_gui_build_n8qytejm\denoise_gui\PYZ-00.pyz
+21536 INFO: Building PYZ (ZlibArchive) C:\Users\user\AppData\Local\Temp\denoise_gui_build_n8qytejm\denoise_gui\PYZ-00.pyz completed successfully.
+21572 INFO: checking PKG
+21572 INFO: Building PKG because PKG-00.toc is non existent
+21572 INFO: Building PKG (CArchive) denoise_gui.pkg
+36445 INFO: Building PKG (CArchive) denoise_gui.pkg completed successfully.
+36461 INFO: Bootloader C:\Users\user\AppData\Roaming\Python\Python312\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+36461 INFO: checking EXE
+36461 INFO: Building EXE because EXE-00.toc is non existent
+36461 INFO: Building EXE from EXE-00.toc
+36461 INFO: Copying bootloader EXE to c:\Users\user\Desktop\myproject2\Nosieprogarm\dist\denoise_gui.exe
+36469 INFO: Copying icon to EXE
+36477 INFO: Copying 0 resources to EXE
+36477 INFO: Embedding manifest in EXE
+36486 INFO: Appending PKG archive to EXE
+36526 INFO: Fixing EXE headers
+36899 INFO: Building EXE from EXE-00.toc completed successfully.
+36916 INFO: Build complete! The results are available in: c:\Users\user\Desktop\myproject2\Nosieprogarm\dist
+
+======================================================================
+PyInstaller warn (โมดูลที่หาไม่เจอ)
+======================================================================
+missing module named _sha512 - imported by random (optional)
+missing module named grp - imported by shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional), setuptools._vendor.backports.tarfile (optional), setuptools._distutils.archive_util (optional)
+missing module named pwd - imported by posixpath (delayed, conditional, optional), shutil (delayed, optional), tarfile (optional), pathlib (delayed, optional), subprocess (delayed, conditional, optional), http.server (delayed, optional), netrc (delayed, conditional), getpass (delayed), psutil (optional), setuptools._distutils.util (delayed, conditional, optional), setuptools._vendor.backports.tarfile (optional), setuptools._distutils.archive_util (optional)
+missing module named posix - imported by os (conditional, optional), shutil (conditional), importlib._bootstrap_external (conditional), posixpath (optional)
+missing module named resource - imported by posix (top-level)
+missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional), zipimport (top-level)
+missing module named _posixshmem - imported by multiprocessing.resource_tracker (conditional), multiprocessing.shared_memory (conditional)
+missing module named multiprocessing.set_start_method - imported by multiprocessing (top-level), multiprocessing.spawn (top-level)
+missing module named multiprocessing.get_start_method - imported by multiprocessing (top-level), multiprocessing.spawn (top-level)
+missing module named _posixsubprocess - imported by subprocess (conditional), multiprocessing.util (delayed)
+missing module named multiprocessing.get_context - imported by multiprocessing (top-level), multiprocessing.pool (top-level), multiprocessing.managers (top-level), multiprocessing.sharedctypes (top-level)
+missing module named multiprocessing.TimeoutError - imported by multiprocessing (top-level), multiprocessing.pool (top-level)
+missing module named _scproxy - imported by urllib.request (conditional)
+missing module named termios - imported by tty (top-level), getpass (optional)
+missing module named multiprocessing.BufferTooShort - imported by multiprocessing (top-level), multiprocessing.connection (top-level)
+missing module named multiprocessing.AuthenticationError - imported by multiprocessing (top-level), multiprocessing.connection (top-level)
+missing module named asyncio.DefaultEventLoopPolicy - imported by asyncio (delayed, conditional), asyncio.events (delayed, conditional)
+missing module named annotationlib - imported by typing_extensions (conditional)
+missing module named _typeshed - imported by numpy.random._common (top-level), numpy.random.bit_generator (top-level), setuptools._distutils.dist (conditional), setuptools.command.bdist_egg (conditional), setuptools.glob (conditional), setuptools._vendor.wheel.wheelfile (conditional), setuptools.compat.py311 (conditional), scipy._external.array_api_compat.common._typing (conditional)
+missing module named vms_lib - imported by platform (delayed, optional)
+missing module named 'java.lang' - imported by platform (delayed, optional)
+missing module named java - imported by platform (delayed)
+missing module named _winreg - imported by platform (delayed, optional)
+missing module named usercustomize - imported by site (delayed, optional)
+missing module named sitecustomize - imported by site (delayed, optional)
+missing module named readline - imported by cmd (delayed, conditional, optional), code (delayed, conditional, optional), pdb (delayed, optional), site (delayed, optional), rlcompleter (optional)
+missing module named importlib_resources - imported by setuptools._vendor.jaraco.text (optional)
+missing module named trove_classifiers - imported by setuptools.config._validate_pyproject.formats (optional)
+missing module named _manylinux - imported by setuptools._vendor.packaging._manylinux (delayed, optional)
+missing module named pyimod02_importers - imported by C:\Users\user\AppData\Roaming\Python\Python312\site-packages\PyInstaller\hooks\rthooks\pyi_rth_pkgutil.py (delayed)
+missing module named torch - imported by scipy._external.array_api_compat.common._helpers (delayed, conditional), scipy._external.array_api_compat.torch._aliases (top-level), scipy._external.array_api_compat.torch._typing (top-level), scipy._external.array_api_compat.torch._info (top-level)
+missing module named 'jax.experimental' - imported by scipy._external.array_api_compat.common._helpers (delayed, conditional)
+missing module named 'jax.numpy' - imported by scipy._external.array_api_compat.common._helpers (delayed)
+missing module named 'dask.array' - imported by scipy._external.array_api_compat.dask.array._aliases (top-level), scipy._external.array_api_compat.dask.array._info (top-level), scipy._external.array_api_compat.common._helpers (delayed, conditional)
+missing module named scipy._external.array_api_compat.common.array_namespace - imported by scipy._external.array_api_compat.common (top-level), scipy._external.array_api_compat.dask.array._aliases (top-level)
+missing module named sparse - imported by scipy._external.array_api_compat.common._helpers (conditional)
+missing module named ndonnx - imported by scipy._external.array_api_compat.common._helpers (conditional)
+missing module named jax - imported by scipy._external.array_api_compat.common._helpers (delayed, conditional)
+missing module named dask - imported by scipy._external.array_api_compat.common._helpers (conditional)
+missing module named cupy - imported by scipy._external.array_api_compat.common._helpers (delayed, conditional), scipy._external.array_api_compat.cupy (top-level), scipy._external.array_api_compat.cupy._aliases (top-level), scipy._external.array_api_compat.cupy._typing (top-level), scipy._external.array_api_compat.cupy._info (top-level)
+
+======================================================================
+log ตอนทดสอบเปิด EXE
+======================================================================
+
+
+===== START 2026-11-10 12:08:41 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI88002 | argv=['c:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+
+
+======================================================================
+log ของโปรแกรม (app.log ท้าย 120 บรรทัด)
+======================================================================
+
+===== START 2026-11-10 11:41:27 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI173682 | argv=['C:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+
+===== START 2026-11-10 11:53:19 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI77322 | argv=['C:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 11:53:25 =====
+
+===== START 2026-11-10 11:53:29 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI103842 | argv=['C:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 11:53:34 =====
+
+===== START 2026-11-10 12:00:57 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI150522 | argv=['C:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 12:01:04 =====
+
+===== START 2026-11-10 12:02:07 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI134922 | argv=['c:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 12:02:15 =====
+
+===== START 2026-11-10 12:02:22 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI20322 | argv=['C:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 12:02:51 =====
+
+===== START 2026-11-10 12:08:41 | python 3.12.0 | meipass=C:\Users\user\AppData\Local\Temp\_MEI88002 | argv=['c:\\Users\\user\\Desktop\\myproject2\\Nosieprogarm\\dist\\denoise_gui.exe'] =====
+===== EXIT 2026-11-10 12:08:51 =====

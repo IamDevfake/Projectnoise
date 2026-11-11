@@ -197,8 +197,8 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
            "-thread_queue_size", "1024", "-i", "pipe:0",
            "-map", "0:v:0?", "-map", "1:a", "-map_metadata", "0"]
     cmd += C.video_args(has_video, a.video_denoise)
-    cmd += ["-c:a", "aac", "-b:a", a.audio_bitrate,
-            "-max_muxing_queue_size", "9999"] + C.container_flags(a.output)
+    cmd += C.audio_args(a.output, a.audio_bitrate)
+    cmd += ["-max_muxing_queue_size", "9999"] + C.container_flags(a.output)
     cmd += [a.output]
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=tmp_err, **C.hide_console())
 

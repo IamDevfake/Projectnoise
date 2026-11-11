@@ -51,8 +51,8 @@ def _run_ffmpeg(a, dur, sr, ch, has_video, tmp_err, rep):
            "-progress", "pipe:1", "-nostdin", "-i", a.input,
            "-map", "0:v:0?", "-map", "0:a:0", "-map_metadata", "0"]
     cmd += C.video_args(has_video, a.video_denoise)
-    cmd += ["-af", ",".join(af), "-c:a", "aac", "-b:a", a.audio_bitrate,
-            "-max_muxing_queue_size", "9999"]
+    cmd += ["-af", ",".join(af)] + C.audio_args(a.output, a.audio_bitrate)
+    cmd += ["-max_muxing_queue_size", "9999"]
     cmd += C.container_flags(a.output) + [a.output]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=tmp_err, text=True,
                             encoding="utf-8", errors="replace", **C.hide_console())
