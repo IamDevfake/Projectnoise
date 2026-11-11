@@ -250,6 +250,35 @@ def run_tests():
     test_results.append(("Multi-format Export (MP3 & M4A)", mp3_ok and m4a_ok))
 
     # -----------------------------------------------------------------
+    # Test 6: ทดสอบการเพิ่มความดังของเสียง (Volume Boost +6 dB)
+    # -----------------------------------------------------------------
+    print("\n[TEST 6] ทดสอบฟังก์ชันเพิ่มความดังของเสียง (Volume Boost +6 dB)")
+    vol_output = os.path.join(custom_save_dir, "denoised_volume_boost.wav")
+    cmd_vol = [
+        sys.executable,
+        os.path.join(os.path.dirname(__file__), "denoise_video.py"),
+        noisy_input_wav,
+        vol_output,
+        "--engine", "spectral",
+        "--reduction", "18",
+        "--volume", "6.0",
+    ]
+    r_vol = subprocess.run(cmd_vol, capture_output=True, text=True)
+    vol_ok = r_vol.returncode == 0 and os.path.isfile(vol_output)
+    if vol_ok:
+        speech_db_spectral_baseline = measure_rms_db(spectral_output, 2.5, 3.0)
+        speech_db_boosted = measure_rms_db(vol_output, 2.5, 3.0)
+        vol_gain_measured = speech_db_boosted - speech_db_spectral_baseline
+        print(f"  - ระดับเสียงพูดแบบปกติ: {speech_db_spectral_baseline:.2f} dB")
+        print(f"  - ระดับเสียงพูดหลังเพิ่มความดัง (+6 dB): {speech_db_boosted:.2f} dB")
+        print(f"  - ความดังเพิ่มขึ้นจริง: +{vol_gain_measured:.2f} dB")
+        t6_pass = vol_gain_measured >= 4.5
+    else:
+        print(f"  - Error: {r_vol.stderr}")
+        t6_pass = False
+    test_results.append(("Volume Boost (+6 dB amplification)", t6_pass))
+
+    # -----------------------------------------------------------------
     # สรุปผลการทดสอบ
     # -----------------------------------------------------------------
     print("\n" + "=" * 70)

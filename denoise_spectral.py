@@ -192,6 +192,10 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
                            a.noise_start, a.noise_dur, rep)
     den = StreamingDenoiser(noise, ch, a.reduction, a.alpha, a.release)
 
+    # คำนวณตัวคูณ linear จาก volume (dB)
+    vol_db = getattr(a, "volume", 0.0)
+    vol_gain = 10.0 ** (vol_db / 20.0) if vol_db != 0.0 else 1.0
+
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostdin", "-i", a.input,
            "-f", "f32le", "-ar", str(sr), "-ac", str(ch),
            "-thread_queue_size", "1024", "-i", "pipe:0",
@@ -206,13 +210,18 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
     try:
         for chunk in decode_audio(a.input, sr, ch, a.highpass):
             out = den.feed(np.ascontiguousarray(chunk))
+            if vol_gain != 1.0:
+                out = np.clip(out * vol_gain, -1.0, 1.0)
             enc.stdin.write(np.ascontiguousarray(out.T).tobytes())
             done += chunk.shape[1]
             pct = min(100.0, done / sr / dur * 100) if dur else 0
             el = time.time() - t0
             eta = el / pct * (100 - pct) if pct > 0 else 0
             rep.update(2, 2, pct, eta)
-        enc.stdin.write(np.ascontiguousarray(den.flush().T).tobytes())
+        flush_out = den.flush()
+        if vol_gain != 1.0:
+            flush_out = np.clip(flush_out * vol_gain, -1.0, 1.0)
+        enc.stdin.write(np.ascontiguousarray(flush_out.T).tobytes())
         enc.stdin.close()
     except BrokenPipeError:
         pass

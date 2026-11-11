@@ -47,6 +47,9 @@ def _run_ffmpeg(a, dur, sr, ch, has_video, tmp_err, rep):
     if a.highpass > 0:
         af.append(f"highpass=f={a.highpass}")
     af.append(f"afftdn=nr={nr}:nf=-45:tn=1")
+    vol_db = getattr(a, "volume", 0.0)
+    if vol_db != 0.0:
+        af.append(f"volume={vol_db}dB")
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostats",
            "-progress", "pipe:1", "-nostdin", "-i", a.input,
            "-map", "0:v:0?", "-map", "0:a:0", "-map_metadata", "0"]
@@ -93,6 +96,8 @@ def build_parser():
                     help="ความนุ่มของการปิดเกท 0-0.99 (มาก = นุ่มขึ้น)")
     ap.add_argument("--highpass", type=float, default=0,
                     help="ตัดความถี่ต่ำกว่านี้ (Hz) เช่น 80 สำหรับเสียงหึ่ง/ลม")
+    ap.add_argument("--volume", type=float, default=0.0,
+                    help="เพิ่ม/ลดความดัง เป็น dB (0 = เท่าเดิม, +6 = ดังขึ้น 2 เท่า)")
     ap.add_argument("--noise-start", type=float, default=None,
                     help="วินาทีเริ่มต้นของช่วงที่เป็น noise ล้วน (ไม่ระบุ = ตรวจจับอัตโนมัติ)")
     ap.add_argument("--noise-dur", type=float, default=2.0,
