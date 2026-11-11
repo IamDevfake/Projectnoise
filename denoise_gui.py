@@ -400,6 +400,14 @@ def main():
     b_rec_save = ttk.Button(r_row1, text="💾 บันทึกเสียงดิบ...", state="disabled")
     b_rec_save.pack(side="left", padx=4)
 
+    v_rec_autogain = tk.BooleanVar(value=True)
+    cb_autogain = ttk.Checkbutton(
+        r_row1,
+        text="⚡ เพิ่มความดังไมค์อัตโนมัติ (Auto Gain)",
+        variable=v_rec_autogain,
+    )
+    cb_autogain.pack(side="left", padx=(10, 4))
+
     r_row2 = ttk.Frame(f_rec)
     r_row2.pack(fill="x", padx=6, pady=(0, 4))
     ttk.Label(r_row2, text="ระดับเสียงไมค์:").pack(side="left")
@@ -416,7 +424,7 @@ def main():
             mins, secs = divmod(int(dur), 60)
             v_rec_dur.set(f"{mins:02d}:{secs:02d}")
             peak, _ = rec_inst.get_levels()
-            rec_meter["value"] = min(100, int(peak * 120))
+            rec_meter["value"] = min(100, int(peak * 250))
             root.after(100, update_rec_ui)
         else:
             rec_meter["value"] = 0
@@ -446,9 +454,9 @@ def main():
             v_rec_status.set(msg)
             return messagebox.showwarning("แจ้งเตือน", msg)
         v_rec_status.set(msg)
-        # บันทึกลงไฟล์ชั่วคราว
+        # บันทึกลงไฟล์ชั่วคราว (พร้อม Auto Gain หากเลือกไว้)
         tmp_wav = os.path.join(tempfile.gettempdir(), f"rec_{int(time.time())}.wav")
-        saved, smsg = rec_inst.save_to_file(tmp_wav)
+        saved, smsg = rec_inst.save_to_file(tmp_wav, normalize=v_rec_autogain.get())
         if saved:
             state["rec_path"] = tmp_wav
             b_rec_play.config(state="normal")

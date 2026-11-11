@@ -119,7 +119,7 @@ def test_settings_and_presets():
               and os.path.exists(os.path.join(td, "settings.json.bak")))
 
         b, u = C.load_presets()
-        check("พรีเซ็ต: มีของในตัว ไม่มีของผู้ใช้", len(b) == 4 and not u)
+        check("พรีเซ็ต: มีของในตัว ไม่มีของผู้ใช้", len(b) == 5 and not u)
         u["ของฉัน"] = {"reduction": 999, "alpha": 1.5, "อื่น": 1}
         u[next(iter(b))] = {"reduction": 5}            # ชื่อชนกับของในตัว ต้องถูกทิ้ง
         C.save_user_presets(u)

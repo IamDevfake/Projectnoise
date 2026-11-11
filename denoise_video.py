@@ -47,9 +47,21 @@ def _run_ffmpeg(a, dur, sr, ch, has_video, tmp_err, rep):
     if a.highpass > 0:
         af.append(f"highpass=f={a.highpass}")
     af.append(f"afftdn=nr={nr}:nf=-45:tn=1")
+    gate_val = getattr(a, "gate", 1.0)
+    if gate_val > 1.0 and C.has_filter("agate"):
+        # Soft expander: ใช้เมื่อผู้ใช้ตั้ง gate > 1.0 เท่านั้น
+        # ratio=1.5, knee=4.0 = เปลี่ยนผ่านนุ่มมาก ป้องกันเสียงกระตุก
+        # attack=30ms, release=400ms = เปิดเร็ว ปิดช้า ป้องกันเสียงแหว่งระหว่างคำ
+        # range=0.12 = ลดสูงสุด -12 dB (ไม่ตัดทิ้ง)
+        thr_db = min(-28.0, max(-55.0, -34.0 + (gate_val - 1.0) * 4.0))
+        thr_lin = 10.0 ** (thr_db / 20.0)
+        af.append(f"agate=threshold={thr_lin:.6f}:ratio=1.5:knee=4.0:attack=30:release=400:range=0.12")
     vol_db = getattr(a, "volume", 0.0)
     if vol_db != 0.0:
         af.append(f"volume={vol_db}dB")
+    if vol_db > 0.0 and C.has_filter("alimiter"):
+        # ป้องกันเสียงแตก (clipping/distortion) เมื่อเร่งเสียงสูง
+        af.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostats",
            "-progress", "pipe:1", "-nostdin", "-i", a.input,
            "-map", "0:v:0?", "-map", "0:a:0", "-map_metadata", "0"]
@@ -98,6 +110,8 @@ def build_parser():
                     help="ตัดความถี่ต่ำกว่านี้ (Hz) เช่น 80 สำหรับเสียงหึ่ง/ลม")
     ap.add_argument("--volume", type=float, default=0.0,
                     help="เพิ่ม/ลดความดัง เป็น dB (0 = เท่าเดิม, +6 = ดังขึ้น 2 เท่า)")
+    ap.add_argument("--gate", type=float, default=1.0,
+                    help="Noise gate: อัตราส่วน P/noise ต่ำกว่านี้ตัดทิ้ง (0=ปิด, 1=ปกติ, 2=แรง)")
     ap.add_argument("--noise-start", type=float, default=None,
                     help="วินาทีเริ่มต้นของช่วงที่เป็น noise ล้วน (ไม่ระบุ = ตรวจจับอัตโนมัติ)")
     ap.add_argument("--noise-dur", type=float, default=2.0,

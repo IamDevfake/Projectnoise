@@ -43,6 +43,9 @@ OPTIONS = {
     "volume": {"label": "เพิ่ม/ลดความดัง (dB)", "flag": "--volume",
                "min": -20, "max": 20, "step": 0.5, "default": 0,
                "hint": "0 = เท่าเดิม, +6 = ดังขึ้น 2 เท่า, -6 = เบาลง"},
+    "gate": {"label": "Noise Gate (ตัดแข็ง)", "flag": "--gate",
+             "min": 0.0, "max": 3.0, "step": 0.1, "default": 1.0,
+             "hint": "0 = ปิด, 1 = ปกติ, 2 = แรง — ตัดบิน FFT ที่ยังถูก noise ครอง"},
 }
 
 # ------------------------------------------------------------------ เอนจิน
@@ -51,25 +54,25 @@ ENGINES = {
         "label": "Spectral (คุณภาพดี ปรับได้)",
         "modules": ["numpy"],          # ไลบรารี Python ที่ต้องมี
         "filters": [],                 # filter ของ ffmpeg ที่ต้องมี
-        "options": ["reduction", "alpha", "release", "highpass", "volume"],
+        "options": ["reduction", "alpha", "release", "highpass", "volume", "gate"],
         "noise_profile": True,         # รองรับการระบุช่วง noise เอง
     },
     "ffmpeg": {
         "label": "FFmpeg (เร็วสุด)",
         "modules": [],
         "filters": ["afftdn"],
-        "options": ["reduction", "highpass", "volume"],
+        "options": ["reduction", "highpass", "volume", "gate"],
         "noise_profile": False,
     },
 }
 DEFAULT_ENGINE = "spectral"
 
 BUILTIN_PRESETS = {
-    "ทั่วไป (พัดลม/แอร์/ฟู่)": {"reduction": 18, "alpha": 2.0, "release": 0.85, "highpass": 0, "volume": 0},
-    "มีเสียงหึ่ง/ลมความถี่ต่ำ": {"reduction": 18, "alpha": 2.0, "release": 0.85, "highpass": 80, "volume": 0},
-    "ลด noise แรง": {"reduction": 24, "alpha": 3.0, "release": 0.85, "highpass": 80, "volume": 0},
-    "รักษาเสียงพูด (นุ่มนวล)": {"reduction": 12, "alpha": 1.5, "release": 0.90, "highpass": 0, "volume": 0},
-    "ลด noise + เพิ่มเสียงให้ดังขึ้น": {"reduction": 18, "alpha": 2.0, "release": 0.85, "highpass": 60, "volume": 6},
+    "ทั่วไป (พัดลม/แอร์/ฟู่)": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 70, "volume": 0, "gate": 1.2},
+    "มีเสียงหึ่ง/ลมความถี่ต่ำ": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 100, "volume": 0, "gate": 1.2},
+    "ลด noise แรง": {"reduction": 26, "alpha": 3.0, "release": 0.85, "highpass": 80, "volume": 0, "gate": 1.5},
+    "รักษาเสียงพูด (นุ่มนวล)": {"reduction": 14, "alpha": 1.6, "release": 0.90, "highpass": 50, "volume": 0, "gate": 0.8},
+    "ลด noise + เพิ่มเสียงให้ดังขึ้น": {"reduction": 22, "alpha": 2.5, "release": 0.85, "highpass": 70, "volume": 6, "gate": 1.5},
 }
 
 

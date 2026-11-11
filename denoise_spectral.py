@@ -85,7 +85,7 @@ def power_spec(frames):
 
 # ------------------------------------------------------------ noise profile
 def estimate_noise(path, sr, ch, dur, highpass, noise_start, noise_dur, rep):
-    """คืนค่า noise power spectrum รูปร่าง (ch, bins)"""
+    """คืนค่า (noise power spectrum (ch, bins), noise_rms_db)"""
     # โหมดกำหนดช่วง noise เอง: เฉลี่ยทุกเฟรมในช่วงนั้น
     if noise_start is not None:
         buf = np.zeros((ch, 0), np.float32)
@@ -94,10 +94,12 @@ def estimate_noise(path, sr, ch, dur, highpass, noise_start, noise_dur, rep):
         if buf.shape[1] < N_FFT:
             sys.exit("ช่วง noise ที่ระบุสั้นเกินไป (ต้อง >= ~0.05 วินาที)")
         P = power_spec(frames_of(np.ascontiguousarray(buf)))
-        return P.mean(axis=1)
+        rms = float(np.sqrt(np.mean(buf ** 2)))
+        rms_db = 20 * np.log10(rms + 1e-20)
+        return P.mean(axis=1), rms_db
 
     blk = sr  # 1 วินาที
-    block_spec, block_energy = [], []
+    block_spec, block_energy, block_rms, has_zeros_list = [], [], [], []
     buf = np.zeros((ch, 0), np.float32)
     t0 = time.time()
     done = 0
@@ -108,29 +110,45 @@ def estimate_noise(path, sr, ch, dur, highpass, noise_start, noise_dur, rep):
             buf = buf[:, blk:]
             P = power_spec(frames_of(seg)[:, ::2])  # (ch, nf, bins)
             e = P.sum(axis=(0, 2))
+            # ตรวจหาความเงียบสนิทดิจิทัล (zeros / mute / padding) เพื่อไม่ให้สับสนกับ ambient noise
+            has_zeros = np.any(e < 1e-3)
+            has_zeros_list.append(has_zeros)
             k = max(1, len(e) // 5)
             idx = np.argsort(e)[:k]                 # เฟรมที่เงียบสุด 20%
             block_spec.append(P[:, idx, :].mean(axis=1))
             block_energy.append(e[idx].mean())
+            block_rms.append(float(np.sqrt(np.mean(seg ** 2))))
             done += 1
         if dur:
             rep.update(1, 2, done / dur * 100)
     rep.finish(1, 2, time.time() - t0)
     if not block_spec:
         sys.exit("ไฟล์เสียงสั้นเกินไปสำหรับประเมิน noise")
-    order = np.argsort(block_energy)
-    k = max(1, len(order) // 10)                    # บล็อกที่เงียบสุด 10%
-    return np.mean([block_spec[i] for i in order[:k]], axis=0)
+
+    # หลีกเลี่ยงบล็อกที่มี digital zeros (เช่น ช่วง fade-in / padding ต้นไฟล์)
+    active = [i for i, h in enumerate(has_zeros_list) if not h]
+    if active:
+        sub = np.argsort([block_energy[i] for i in active])
+        chosen = [active[i] for i in sub[:max(1, len(active) // 5)]]
+    else:
+        order = np.argsort(block_energy)
+        chosen = order[:max(1, len(order) // 5)]
+
+    noise_spec = np.mean([block_spec[i] for i in chosen], axis=0)
+    noise_rms = float(np.mean([block_rms[i] for i in chosen]))
+    noise_rms_db = 20 * np.log10(noise_rms + 1e-20)
+    return noise_spec, noise_rms_db
 
 
 # --------------------------------------------------------------- denoiser
 class StreamingDenoiser:
-    def __init__(self, noise_pow, ch, reduction_db, alpha, release):
+    def __init__(self, noise_pow, ch, reduction_db, alpha, release, gate=1.0):
         self.ch = ch
         self.noise = noise_pow[:, None, :].astype(np.float32)
         self.floor = 10 ** (-reduction_db / 20.0)
         self.alpha = alpha
         self.release = release
+        self.gate = float(gate)
         pre = N_FFT - HOP
         self.buf = np.zeros((ch, pre), np.float32)   # pre-pad ให้ตำแหน่งตรงกัน
         self.tail = np.zeros((ch, pre), np.float32)
@@ -161,8 +179,8 @@ class StreamingDenoiser:
         P = uniform_filter1d(P, size=5, axis=2)
         if nf > 2:
             P = uniform_filter1d(P, size=3, axis=1)
-        g = np.sqrt(np.maximum(1.0 - self.alpha * self.noise / (P + 1e-20), 0.0))
-        g = np.maximum(g, self.floor).mean(axis=0)          # link ช่อง -> (nf, bins)
+        raw_g = np.sqrt(np.maximum(1.0 - self.alpha * self.noise / (P + 1e-20), 0.0))
+        g = np.maximum(raw_g, self.floor).mean(axis=0)          # link ช่อง -> (nf, bins)
         g = uniform_filter1d(g, size=3, axis=1)
         prev, r = self.prev_g, self.release
         for i in range(nf):                                  # attack เร็ว / release ช้า
@@ -188,13 +206,42 @@ class StreamingDenoiser:
 
 # ------------------------------------------------------------------ runner
 def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
-    noise = estimate_noise(a.input, sr, ch, dur, a.highpass,
-                           a.noise_start, a.noise_dur, rep)
-    den = StreamingDenoiser(noise, ch, a.reduction, a.alpha, a.release)
+    noise, noise_rms_db = estimate_noise(a.input, sr, ch, dur, a.highpass,
+                                         a.noise_start, a.noise_dur, rep)
+    gate_val = getattr(a, "gate", 1.0)
+    den = StreamingDenoiser(noise, ch, a.reduction, a.alpha, a.release, gate=gate_val)
 
     # คำนวณตัวคูณ linear จาก volume (dB)
     vol_db = getattr(a, "volume", 0.0)
     vol_gain = 10.0 ** (vol_db / 20.0) if vol_db != 0.0 else 1.0
+
+    # Pipeline: Python spectral denoise → ffmpeg [agate (soft expander) → volume → alimiter]
+    # รัน agate ที่ระดับเสียงธรรมชาติต้นฉบับ (ก่อน volume boost) เพื่อไม่ให้ตัดคำพูด
+    #
+    # ⚠️ ปัญหาเสียงกระตุก (stutter): ratio=4 / attack=15ms ทำให้ agate ก้าวร้าวเกินไป
+    #   - ช่วงพักระหว่างคำพูดมักมีระดับเสียงเพียง -30 ถึง -40 dB
+    #   - threshold -22 dB ทับกับช่วงพักดังกล่าว → gate ปิด-เปิดบ่อย → กระตุก
+    #
+    # แนวทางแก้ไข:
+    #   gate_val = 1.0 (ค่าปกติ): ไม่ใช้ agate เพราะ spectral denoiser กรอง noise แล้ว
+    #   gate_val > 1.0 (ผู้ใช้ตั้งเอง): ใช้ agate แบบ "soft expander" เท่านั้น
+    #     ratio=1.5 (ลดแทนที่จะตัด), knee=4.0 (เปลี่ยนผ่านนุ่มมาก)
+    #     attack=30ms, release=400ms (เปิดเร็ว ปิดช้า ป้องกันเสียงแหว่ง)
+    #     range=0.12 (ลดได้สูงสุด -12 dB แทนที่จะตัดทิ้ง)
+    # alimiter ป้องกันเสียงแตกพร่า (distortion/clipping) เมื่อเร่ง volume สูง (+20 dB)
+    af_parts = []
+    if gate_val > 1.0 and C.has_filter("agate"):
+        # Soft expander: ใช้เมื่อผู้ใช้ตั้ง gate > 1.0 เท่านั้น
+        # คำนวณ threshold จาก noise floor: ยิ่ง gate สูง ยิ่ง threshold สูงขึ้น
+        thr_db = min(-28.0, max(-55.0, noise_rms_db + 2.0 + (gate_val - 1.0) * 4.0))
+        thr_lin = 10.0 ** (thr_db / 20.0)
+        af_parts.append(
+            f"agate=threshold={thr_lin:.6f}:ratio=1.5:knee=4.0:attack=30:release=400:range=0.12"
+        )
+    if vol_db != 0.0:
+        af_parts.append(f"volume={vol_db}dB")
+    if vol_db > 0.0 and C.has_filter("alimiter"):
+        af_parts.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
 
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostdin", "-i", a.input,
            "-f", "f32le", "-ar", str(sr), "-ac", str(ch),
@@ -202,6 +249,8 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
            "-map", "0:v:0?", "-map", "1:a", "-map_metadata", "0"]
     cmd += C.video_args(has_video, a.video_denoise)
     cmd += C.audio_args(a.output, a.audio_bitrate)
+    if af_parts:
+        cmd += ["-af", ",".join(af_parts)]
     cmd += ["-max_muxing_queue_size", "9999"] + C.container_flags(a.output)
     cmd += [a.output]
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=tmp_err, **C.hide_console())
@@ -210,8 +259,6 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
     try:
         for chunk in decode_audio(a.input, sr, ch, a.highpass):
             out = den.feed(np.ascontiguousarray(chunk))
-            if vol_gain != 1.0:
-                out = np.clip(out * vol_gain, -1.0, 1.0)
             enc.stdin.write(np.ascontiguousarray(out.T).tobytes())
             done += chunk.shape[1]
             pct = min(100.0, done / sr / dur * 100) if dur else 0
@@ -219,8 +266,6 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
             eta = el / pct * (100 - pct) if pct > 0 else 0
             rep.update(2, 2, pct, eta)
         flush_out = den.flush()
-        if vol_gain != 1.0:
-            flush_out = np.clip(flush_out * vol_gain, -1.0, 1.0)
         enc.stdin.write(np.ascontiguousarray(flush_out.T).tobytes())
         enc.stdin.close()
     except BrokenPipeError:

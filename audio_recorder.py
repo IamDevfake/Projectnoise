@@ -149,12 +149,25 @@ class AudioRecorder:
             data = np.concatenate(self._frames, axis=0)
             return data
 
-    def save_to_file(self, output_path):
-        """บันทึกข้อมูลเสียงที่อัดเป็นไฟล์ WAV 16-bit PCM"""
+    def save_to_file(self, output_path, normalize=True, target_peak=0.85):
+        """บันทึกข้อมูลเสียงที่อัดเป็นไฟล์ WAV 16-bit PCM
+        หาก normalize=True: จะปรับความดังเสียงไมค์อัตโนมัติ (Auto Gain) เพื่อแก้ปัญหาไมค์บันทึกเสียงเบา
+        """
         with self._lock:
             if not self._frames:
                 return False, "ไม่มีข้อมูลเสียงที่จะบันทึก"
             audio_data = np.concatenate(self._frames, axis=0)
+
+        # ลบ DC Offset (ค่ากึ่งกลางสัญญาณเบี่ยงเบน)
+        audio_data = audio_data - np.mean(audio_data, axis=0, keepdims=True)
+
+        # เร่งความดังอัตโนมัติ (Auto-Gain Normalization) สำหรับไมค์ที่เสียงเบา
+        if normalize:
+            peak = float(np.max(np.abs(audio_data)))
+            if peak > 0.002:  # มีสัญญาณเสียงจริง ไม่ใช่ความเงียบสนิท
+                # ขยายสัญญาณให้แตะ target_peak (-1.4 dBFS) สูงสุดไม่เกิน 30 เท่า (~ +29.5 dB)
+                gain = min(30.0, target_peak / peak)
+                audio_data = audio_data * gain
 
         # บีบอัดเป็น 16-bit PCM
         audio_int16 = np.int16(np.clip(audio_data, -1.0, 1.0) * 32767)
