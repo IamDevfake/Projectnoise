@@ -20,7 +20,7 @@ VersionInfoVersion=1.1.0
 VersionInfoCompany=denoise_gui
 VersionInfoDescription=denoise_gui Setup
 VersionInfoProductName=denoise_gui
-SetupIconFile="icon.ico"
+; SetupIconFile omitted: file not found
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

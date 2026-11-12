@@ -672,14 +672,29 @@ def main():
     selection_focus = {"widget": None}
     text_selection_classes = {"Entry", "TEntry", "TCombobox", "Text"}
 
+    def resolve_tk_widget(candidate):
+        if candidate is None:
+            return None
+        if isinstance(candidate, str):
+            try:
+                candidate = root.nametowidget(candidate)
+            except (KeyError, tk.TclError):
+                return None
+        return candidate if callable(getattr(candidate, "winfo_class", None)) else None
+
     def remember_selection_focus(event):
+        widget = resolve_tk_widget(getattr(event, "widget", None))
         try:
             selection_focus["widget"] = (
-                event.widget if event.widget.winfo_class() in text_selection_classes else None)
+                widget if widget is not None and
+                widget.winfo_class() in text_selection_classes else None)
         except tk.TclError:
-            pass
+            selection_focus["widget"] = None
 
-    def clear_widget_selection(widget):
+    def clear_widget_selection(candidate):
+        widget = resolve_tk_widget(candidate)
+        if widget is None:
+            return
         try:
             if hasattr(widget, "selection_clear"):
                 widget.selection_clear()
@@ -691,18 +706,21 @@ def main():
     def clear_text_selection(event):
         # Clear both the text highlight and its active focus when clicking
         # outside that field, without changing the field's value.
-        previous = selection_focus["widget"]
-        target = event.widget
+        previous = resolve_tk_widget(selection_focus["widget"])
+        target = resolve_tk_widget(getattr(event, "widget", None))
         if previous is not None:
             clear_widget_selection(previous)
-        clear_widget_selection(target)
+        if target is not None:
+            clear_widget_selection(target)
         try:
-            focused = root.focus_get()
-            if previous is not None and previous is not target and focused is previous:
+            focused = resolve_tk_widget(root.focus_get())
+            if (previous is not None and
+                    (target is None or previous._w != target._w) and
+                    focused is not None and focused._w == previous._w):
                 # Non-focusable targets leave the old entry active; move focus
                 # to the window so the old control loses its active styling.
                 root.focus_set()
-            focused = root.focus_get()
+            focused = resolve_tk_widget(root.focus_get())
             selection_focus["widget"] = (
                 focused if focused is not None and
                 focused.winfo_class() in text_selection_classes else None)
@@ -742,7 +760,7 @@ def main():
 
     theme_button = ttk.Button(content, width=15, takefocus=False)
     theme_button.pack(anchor="e", padx=10, pady=(0, 2))
-    f_rec = ttk.LabelFrame(content, text="1. อัดเสียงจากไมโครโฟน (บันทึกเสียงสด)")
+    f_rec = ttk.LabelFrame(content, text="1. เริ่มอัดเสียงจากไมโครโฟน")
     f_rec.pack(fill="x", **pad)
     f_rec.columnconfigure(2, weight=1)
 
@@ -755,9 +773,9 @@ def main():
     b_rec_stop.pack(side="left", padx=4)
     b_rec_play = ttk.Button(r_row1, text="▶  ฟังเสียงที่อัด", width=13, state="disabled")
     b_rec_play.pack(side="left", padx=4)
-    b_rec_use = ttk.Button(r_row1, text="นำเข้าเพื่อลด noise", width=16, state="disabled")
+    b_rec_use = ttk.Button(r_row1, text="นำเข้าไฟล์เพื่อลดเสียงรบกวน", width=22, state="disabled")
     b_rec_use.pack(side="left", padx=4)
-    b_rec_save = ttk.Button(r_row1, text="บันทึกเสียงดิบ...", width=16, state="disabled")
+    b_rec_save = ttk.Button(r_row1, text="บันทึกเสียงจากไมค์", width=16, state="disabled")
     b_rec_save.pack(side="left", padx=4)
 
     r_row2 = ttk.Frame(f_rec)
@@ -768,7 +786,7 @@ def main():
     check_canvas = tk.Canvas(autogain_box, width=26, height=26, highlightthickness=0,
                              borderwidth=0, takefocus=True, cursor="hand2")
     check_canvas.pack(side="left", padx=(0, 4))
-    autogain_label = ttk.Label(autogain_box, text="เพิ่มระดับเสียงไมค์อัตโนมัติ (Auto Gain)",
+    autogain_label = ttk.Label(autogain_box, text="เพิ่มระดับเสียงไมค์อัตโนมัติ",
                                cursor="hand2")
     autogain_label.pack(side="left")
 
