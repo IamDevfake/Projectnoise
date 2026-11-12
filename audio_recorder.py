@@ -18,10 +18,12 @@ except ImportError:
 class AudioRecorder:
     def __init__(self, sample_rate=44100, channels=1):
         self.sample_rate = sample_rate
+        self._requested_sample_rate = sample_rate
         self.channels = channels
         self.is_recording = False
         self.is_paused = False
         self._frames = []
+        self._total_samples = 0
         self._stream = None
         self._lock = threading.Lock()
         self._start_time = 0.0
@@ -62,6 +64,7 @@ class AudioRecorder:
         data_copy = indata.copy()
         with self._lock:
             self._frames.append(data_copy)
+            self._total_samples += len(data_copy)
             # คำนวณค่า Peak และ RMS สำหรับ VU Meter
             peak = float(np.max(np.abs(data_copy)))
             rms = float(np.sqrt(np.mean(data_copy ** 2)))
@@ -78,6 +81,7 @@ class AudioRecorder:
 
         with self._lock:
             self._frames.clear()
+            self._total_samples = 0
             self.current_peak = 0.0
             self.current_rms = 0.0
             self._start_time = time.time()
@@ -85,20 +89,39 @@ class AudioRecorder:
             self.is_recording = True
             self.is_paused = False
 
+        rates = [self._requested_sample_rate]
         try:
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                dtype="float32",
-                device=device_index,
-                callback=self._audio_callback,
-                blocksize=1024,
-            )
-            self._stream.start()
-            return True, "เริ่มบันทึกเสียงเรียบร้อย"
-        except Exception as e:
-            self.is_recording = False
-            return False, f"ไม่สามารถเปิดไมโครโฟนได้: {e}"
+            info = sd.query_devices(device=device_index, kind="input")
+            default_rate = int(round(info.get("default_samplerate") or 0))
+            if default_rate and default_rate not in rates:
+                rates.append(default_rate)
+        except Exception:
+            pass
+
+        errors = []
+        for rate in rates:
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=rate,
+                    channels=self.channels,
+                    dtype="float32",
+                    device=device_index,
+                    callback=self._audio_callback,
+                    blocksize=1024,
+                )
+                self._stream.start()
+                self.sample_rate = rate
+                return True, "เริ่มบันทึกเสียงเรียบร้อย"
+            except Exception as e:
+                errors.append(f"{rate} Hz: {e}")
+                if self._stream:
+                    try:
+                        self._stream.close()
+                    except Exception:
+                        pass
+                    self._stream = None
+        self.is_recording = False
+        return False, "ไม่สามารถเปิดไมโครโฟนได้: " + " | ".join(errors)
 
     def pause_recording(self):
         if not self.is_recording:
@@ -108,11 +131,8 @@ class AudioRecorder:
     def get_duration(self):
         if not self.is_recording:
             return self._recorded_seconds
-        if self.is_paused:
-            return self._recorded_seconds
         with self._lock:
-            total_samples = sum(len(f) for f in self._frames)
-            return total_samples / self.sample_rate
+            return self._total_samples / self.sample_rate
 
     def get_levels(self):
         """คืนค่า (peak, rms) ช่วง 0.0 - 1.0"""
@@ -137,8 +157,7 @@ class AudioRecorder:
         with self._lock:
             if not self._frames:
                 return False, "ไม่มีข้อมูลเสียงที่บันทึก"
-            total_samples = sum(len(f) for f in self._frames)
-            self._recorded_seconds = total_samples / self.sample_rate
+            self._recorded_seconds = self._total_samples / self.sample_rate
 
         return True, f"บันทึกเสียงสำเร็จ ความยาว {self._recorded_seconds:.1f} วินาที"
 

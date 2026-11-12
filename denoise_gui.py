@@ -73,6 +73,12 @@ def build_command(o, src, dst):
                 "--noise-dur", str(o["noise_dur"])]
     if o.get("video_denoise"):
         cmd.append("--video-denoise")
+    if o.get("auto_enhance", True):
+        cmd.append("--auto-enhance")
+    if o.get("wind_reduction", True):
+        cmd.append("--wind-reduction")
+    if o.get("auto_tune", True) and o["engine"] == "spectral":
+        cmd.append("--auto-tune")
     return cmd
 
 
@@ -236,9 +242,10 @@ def set_app_icon(root, tk):
     """ตั้งค่าไอคอนโปรแกรมสำหรับ Title bar และ Taskbar ด้วย icon.ico ของโปรเจกต์"""
     try:
         base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-        ico_path = os.path.join(base_dir, "icon.ico")
-        if not os.path.isfile(ico_path):
-            ico_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+        candidates = [os.path.join(base_dir, "icon.ico"),
+                      os.path.join(base_dir, "icons", "icon.ico"),
+                      os.path.join(HERE, "icons", "icon.ico")]
+        ico_path = next((p for p in candidates if os.path.isfile(p)), "")
 
         if os.name == "nt":
             import ctypes
@@ -324,15 +331,13 @@ def configure_sharp_ui(root):
     except Exception:
         pass
 
-    # ปรับแต่ง ttk Style เพื่อให้ขอบ คอนทราสต์ และช่องไฟคมชัด สบายตา
+    # ใช้ clam เป็นฐานเพื่อให้ปรับสีธีมได้สม่ำเสมอทั้ง Windows และ Linux
     style = ttk.Style(root)
-    if "vista" in style.theme_names():
-        style.theme_use("vista")
-    elif "clam" in style.theme_names():
+    if "clam" in style.theme_names():
         style.theme_use("clam")
 
     style.configure("TLabelframe", padding=(10, 6))
-    style.configure("TLabelframe.Label", font=(ui_font, 10, "bold"), foreground="#0f172a")
+    style.configure("TLabelframe.Label", font=(ui_font, 10, "bold"))
     style.configure("TButton", font=(ui_font, 10), padding=(10, 4))
     style.configure("TLabel", font=(ui_font, 10))
     style.configure("TRadiobutton", font=(ui_font, 10))
@@ -344,6 +349,148 @@ def configure_sharp_ui(root):
     return ui_font, mono_font
 
 
+THEMES = {
+    "light": {"bg": "#ffffff", "surface": "#ffffff", "text": "#172033",
+              "muted": "#5b6575", "border": "#cbd5e1", "entry": "#ffffff",
+              "log": "#ffffff", "accent": "#2563eb", "select": "#bfdbfe",
+              "trough": "#e5e7eb", "mark": "#000000", "scroll_thumb": "#64748b"},
+    "dark": {"bg": "#111827", "surface": "#1f2937", "text": "#e5e7eb",
+             "muted": "#aab4c4", "border": "#374151", "entry": "#111827",
+             "log": "#0b1220", "accent": "#60a5fa", "select": "#1e3a5f",
+             "trough": "#374151", "mark": "#ffffff", "scroll_thumb": "#d1d5db"},
+}
+
+
+def make_folder_icon(root, color):
+    """Draw a small folder icon using the current theme accent color."""
+    import tkinter as tk
+
+    icon = tk.PhotoImage(master=root, width=20, height=18)
+    pixels = set()
+    for x in range(4, 10):
+        pixels.add((x, 3))
+    for y in range(4, 16):
+        for x in range(2, 18):
+            pixels.add((x, y))
+    for x in range(2, 18):
+        pixels.add((x, 5))
+    for x, y in pixels:
+        icon.put(color, to=(x, y))
+    return icon
+
+
+def draw_check_indicator(canvas, checked, palette):
+    """Draw a large, crisp check instead of the platform-dependent X marker."""
+    canvas.delete("all")
+    canvas.configure(background=palette["bg"])
+    canvas.create_rectangle(2, 2, 24, 24, fill=palette["surface"],
+                            outline=palette["border"], width=2)
+    if checked:
+        canvas.create_line(7, 13, 11, 18, 20, 8, fill=palette["mark"],
+                           width=2, capstyle="round", joinstyle="round")
+
+
+def apply_windows_chrome(root, theme_name, palette):
+    """Match the native Windows title bar and resize border to the selected theme."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        client_hwnd = wintypes.HWND(root.winfo_id())
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        user32.GetAncestor.restype = wintypes.HWND
+        hwnd = user32.GetAncestor(client_hwnd, 2) or client_hwnd  # GA_ROOT
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD,
+                                               wintypes.LPCVOID, wintypes.DWORD]
+        # HRESULT is a signed 32-bit value; ctypes.wintypes does not expose it on all Python builds.
+        dwm.DwmSetWindowAttribute.restype = ctypes.c_int32
+
+        def set_attribute(target, attribute, value):
+            result = ctypes.c_int(value)
+            return dwm.DwmSetWindowAttribute(target, attribute, ctypes.byref(result),
+                                             ctypes.sizeof(result))
+
+        dark = theme_name == "dark"
+
+        def colorref(hex_color):
+            rgb = bytes.fromhex(hex_color.lstrip("#"))
+            return rgb[0] | (rgb[1] << 8) | (rgb[2] << 16)
+
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                                         ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                         wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        # Attribute 20 is current Windows 11; 19 supports earlier builds.
+        if set_attribute(hwnd, 20, int(dark)) < 0:
+            set_attribute(hwnd, 19, int(dark))
+        set_attribute(hwnd, 35, colorref(palette["bg"]))       # DWMWA_CAPTION_COLOR
+        set_attribute(hwnd, 36, colorref(palette["text"]))     # DWMWA_TEXT_COLOR
+        set_attribute(hwnd, 34, colorref(palette["border"]))   # DWMWA_BORDER_COLOR
+        user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x27)
+        dwm.DwmFlush()
+    except Exception:
+        # Older Windows versions keep the system title bar if DWM colors are unavailable.
+        pass
+
+
+def apply_ui_theme(root, canvas, content, theme_name, logbox=None, sliders=(),
+                   theme_button=None, check_canvas=None, check_var=None, folder_button=None,
+                   scrollbar_control=None):
+    """Apply one palette to ttk, the scroll surface, and classic Tk controls."""
+    from tkinter import ttk
+
+    theme_name = theme_name if theme_name in THEMES else "light"
+    p = THEMES[theme_name]
+    style = ttk.Style(root)
+    root.configure(background=p["bg"])
+    style.configure("TFrame", background=p["bg"])
+    style.configure("TLabel", background=p["bg"], foreground=p["text"])
+    style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
+    style.configure("TLabelframe", background=p["bg"], foreground=p["text"],
+                     bordercolor=p["border"])
+    style.configure("TLabelframe.Label", background=p["bg"], foreground=p["text"])
+    style.configure("TButton", background=p["surface"], foreground=p["text"],
+                     bordercolor=p["border"])
+    style.map("TButton", background=[("active", p["select"]), ("disabled", p["bg"])],
+              foreground=[("disabled", p["muted"])])
+    style.configure("TCheckbutton", background=p["bg"], foreground=p["text"])
+    style.map("TCheckbutton", background=[("active", p["bg"])])
+    style.configure("TRadiobutton", background=p["bg"], foreground=p["text"])
+    style.map("TRadiobutton", background=[("active", p["bg"])])
+    style.configure("TEntry", fieldbackground=p["entry"], foreground=p["text"])
+    style.configure("TSpinbox", fieldbackground=p["entry"], foreground=p["text"])
+    style.configure("TCombobox", fieldbackground=p["entry"], foreground=p["text"],
+                     background=p["surface"])
+    style.map("TCombobox", fieldbackground=[("readonly", p["entry"])],
+              foreground=[("readonly", p["text"])])
+    style.configure("TProgressbar", background=p["accent"], troughcolor=p["trough"])
+    style.configure("Vertical.TScrollbar", background=p["surface"],
+                     troughcolor=p["bg"], bordercolor=p["bg"], arrowcolor=p["text"])
+    canvas.configure(background=p["bg"])
+    content.configure(style="TFrame")
+    for slider in sliders:
+        slider.configure(bg=p["bg"], fg=p["text"], troughcolor=p["trough"],
+                         activebackground=p["accent"], highlightbackground=p["bg"])
+    if logbox is not None:
+        logbox.configure(bg=p["log"], fg=p["text"], insertbackground=p["text"],
+                         selectbackground=p["select"], selectforeground=p["text"])
+    if theme_button is not None:
+        theme_button.configure(text="ธีมสว่าง" if theme_name == "light" else "ธีมมืด")
+    if check_canvas is not None and check_var is not None:
+        draw_check_indicator(check_canvas, check_var.get(), p)
+    if folder_button is not None:
+        icon = make_folder_icon(root, p["mark"])
+        folder_button.configure(image=icon, compound="left")
+        folder_button._icon_image = icon
+    if scrollbar_control is not None:
+        scrollbar_control.set_palette(p)
+    apply_windows_chrome(root, theme_name, p)
+
+
 def main():
     if sys.version_info < C.MIN_PYTHON:
         _fatal("ต้องใช้ Python %d.%d ขึ้นไป" % C.MIN_PYTHON)
@@ -351,16 +498,224 @@ def main():
     import tkinter as tk
     from tkinter import filedialog, messagebox, simpledialog, ttk
 
+    class ShortThumbScrollbar(tk.Canvas):
+        """Full-height scrollbar track with a deliberately shorter draggable thumb."""
+
+        def __init__(self, master, command, palette):
+            super().__init__(master, width=20, highlightthickness=0, borderwidth=0,
+                             takefocus=False, cursor="arrow", background=palette["bg"])
+            self.command = command
+            self.palette = palette
+            self.first, self.last = 0.0, 1.0
+            self.thumb_top = 0.0
+            self.thumb_height = 0.0
+            self.track_top = 5.0
+            self.track_bottom = 5.0
+            self.drag_offset = None
+            self.bind("<Configure>", self._draw)
+            self.bind("<Button-1>", self._press)
+            self.bind("<B1-Motion>", self._drag)
+            self.bind("<ButtonRelease-1>", self._release)
+            self.bind("<space>", lambda _event: self.command("scroll", 1, "pages"))
+
+        def set_palette(self, palette):
+            self.palette = palette
+            self._draw()
+
+        def set(self, first, last):
+            self.first = min(1.0, max(0.0, float(first)))
+            self.last = min(1.0, max(self.first, float(last)))
+            self._draw()
+
+        def _draw(self, _event=None):
+            self.delete("all")
+            width, height = self.winfo_width(), self.winfo_height()
+            self.configure(background=self.palette["bg"])
+            if width <= 2 or height <= 2:
+                return
+
+            self.track_top = 16.0
+            self.track_bottom = max(self.track_top + 1, height - 16.0)
+            track_length = self.track_bottom - self.track_top
+            visible = max(0.0, min(1.0, self.last - self.first))
+            scroll_range = max(0.0, 1.0 - visible)
+            if scroll_range <= 1e-6:
+                self.thumb_height = track_length
+            else:
+                # Shorten only the handle, while retaining the full-height track.
+                self.thumb_height = max(48.0, track_length * visible * 0.68)
+                self.thumb_height = min(track_length, self.thumb_height)
+            travel = max(0.0, track_length - self.thumb_height)
+            position = self.first / scroll_range if scroll_range > 1e-6 else 0.0
+            self.thumb_top = self.track_top + travel * min(1.0, max(0.0, position))
+
+            mid = width / 2.0
+            self.create_polygon(mid, 4, mid - 4, 10, mid + 4, 10,
+                                fill=self.palette["scroll_thumb"], outline="")
+            self.create_polygon(mid, height - 4, mid - 4, height - 10,
+                                mid + 4, height - 10,
+                                fill=self.palette["scroll_thumb"], outline="")
+            self.create_line(mid, self.track_top, mid, self.track_bottom,
+                             fill=self.palette["trough"], width=2, tags="track")
+            inset = 3.0
+            self.create_rectangle(inset, self.thumb_top, width - inset,
+                                  self.thumb_top + self.thumb_height,
+                                  fill=self.palette["scroll_thumb"],
+                                  outline=self.palette["border"], width=1, tags="thumb")
+
+        def _press(self, event):
+            if event.y < self.track_top:
+                self.command("scroll", -1, "units")
+                return "break"
+            if event.y > self.track_bottom:
+                self.command("scroll", 1, "units")
+                return "break"
+            if self.thumb_top <= event.y <= self.thumb_top + self.thumb_height:
+                self.drag_offset = event.y - self.thumb_top
+            else:
+                direction = -1 if event.y < self.thumb_top else 1
+                self.command("scroll", direction, "pages")
+                self.drag_offset = self.thumb_height / 2.0
+            return "break"
+
+        def _drag(self, event):
+            if self.drag_offset is None:
+                return "break"
+            travel = max(1.0, self.track_bottom - self.track_top - self.thumb_height)
+            top = min(self.track_bottom - self.thumb_height,
+                      max(self.track_top, event.y - self.drag_offset))
+            position = (top - self.track_top) / travel
+            visible = max(0.0, min(1.0, self.last - self.first))
+            self.command("moveto", position * (1.0 - visible))
+            return "break"
+
+        def _release(self, _event):
+            self.drag_offset = None
+
+    cfg = C.load_settings()
+    initial_theme = cfg.get("theme", "light")
+    initial_palette = THEMES.get(initial_theme, THEMES["light"])
+
     root = tk.Tk()
+    root.withdraw()
     root.title(APP_TITLE)
+    root.configure(background=initial_palette["bg"])
     set_app_icon(root, tk)
     ui_font, mono_font = configure_sharp_ui(root)
-    root.minsize(700, 800)
+    root.geometry("1000x820")
+    root.minsize(680, 520)
+
+    # Keep the controls usable on short windows while letting the content width
+    # follow the window as it is resized.
+    scroll_frame = ttk.Frame(root)
+    scroll_frame.pack(fill="both", expand=True)
+    scroll_frame.columnconfigure(0, weight=1)
+    scroll_frame.rowconfigure(0, weight=1)
+    canvas = tk.Canvas(scroll_frame, highlightthickness=0, borderwidth=0,
+                       background=initial_palette["bg"])
+    scrollbar = ShortThumbScrollbar(scroll_frame, command=canvas.yview,
+                                    palette=initial_palette)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.grid(row=0, column=0, sticky="nsew")
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    content = ttk.Frame(canvas)
+    content_id = canvas.create_window((0, 0), window=content, anchor="nw")
+    scroll_cache = {"width": None, "region": None, "pending_width": None,
+                    "width_job": None}
+
+    def update_scroll_region(_event=None):
+        region = canvas.bbox("all")
+        if region and region != scroll_cache["region"]:
+            canvas.configure(scrollregion=region)
+            scroll_cache["region"] = region
+
+    def fit_content_width(event):
+        # Minimize/restore can briefly report a zero-width client area. Ignore
+        # it, and coalesce resize events so the embedded frame is laid out once.
+        if event.width <= 1:
+            return
+        scroll_cache["pending_width"] = event.width
+        if scroll_cache["width_job"] is not None:
+            root.after_cancel(scroll_cache["width_job"])
+        scroll_cache["width_job"] = root.after(90, apply_content_width)
+
+    def apply_content_width():
+        scroll_cache["width_job"] = None
+        width = scroll_cache["pending_width"]
+        if width is not None and width != scroll_cache["width"]:
+            canvas.itemconfigure(content_id, width=width)
+            scroll_cache["width"] = width
+
+    content.bind("<Configure>", update_scroll_region)
+    canvas.bind("<Configure>", fit_content_width)
+
+    def scroll_content(event):
+        try:
+            if event.widget.winfo_class() in ("Text", "Entry", "TEntry", "TCombobox", "Spinbox", "TSpinbox"):
+                return
+        except Exception:
+            pass
+        if getattr(event, "num", None) == 4:
+            canvas.yview_scroll(-3, "units")
+        elif getattr(event, "num", None) == 5:
+            canvas.yview_scroll(3, "units")
+        else:
+            steps = int(-event.delta / 120)
+            if steps == 0 and event.delta:
+                steps = -1 if event.delta > 0 else 1
+            canvas.yview_scroll(steps, "units")
+
+    root.bind_all("<MouseWheel>", scroll_content)
+    root.bind_all("<Button-4>", scroll_content)
+    root.bind_all("<Button-5>", scroll_content)
+
+    selection_focus = {"widget": None}
+    text_selection_classes = {"Entry", "TEntry", "TCombobox", "Text"}
+
+    def remember_selection_focus(event):
+        try:
+            selection_focus["widget"] = (
+                event.widget if event.widget.winfo_class() in text_selection_classes else None)
+        except tk.TclError:
+            pass
+
+    def clear_widget_selection(widget):
+        try:
+            if hasattr(widget, "selection_clear"):
+                widget.selection_clear()
+            if widget.winfo_class() == "Text":
+                widget.tag_remove("sel", "1.0", "end")
+        except tk.TclError:
+            pass
+
+    def clear_text_selection(event):
+        # Clear both the text highlight and its active focus when clicking
+        # outside that field, without changing the field's value.
+        previous = selection_focus["widget"]
+        target = event.widget
+        if previous is not None:
+            clear_widget_selection(previous)
+        clear_widget_selection(target)
+        try:
+            focused = root.focus_get()
+            if previous is not None and previous is not target and focused is previous:
+                # Non-focusable targets leave the old entry active; move focus
+                # to the window so the old control loses its active styling.
+                root.focus_set()
+            focused = root.focus_get()
+            selection_focus["widget"] = (
+                focused if focused is not None and
+                focused.winfo_class() in text_selection_classes else None)
+        except tk.TclError:
+            selection_focus["widget"] = None
+
+    root.bind_all("<FocusIn>", remember_selection_focus, add="+")
+    root.bind_all("<Button-1>", clear_text_selection, add="+")
     pad = {"padx": 10, "pady": 4}
 
     events = queue.Queue()
-    state = {"job": None, "t0": 0.0, "out": "", "user_presets": set(), "rec_path": ""}
-    cfg = C.load_settings()
+    state = {"job": None, "t0": 0.0, "out": "", "user_presets": set(), "rec_path": "",
+             "theme": cfg.get("theme", "light")}
     presets = {}
 
     v_in, v_out = tk.StringVar(), tk.StringVar()
@@ -372,6 +727,9 @@ def main():
     v_manual = tk.BooleanVar(value=cfg["noise_manual"])
     v_ns, v_nd = tk.DoubleVar(value=cfg["noise_start"]), tk.DoubleVar(value=cfg["noise_dur"])
     v_vid, v_prev = tk.BooleanVar(value=cfg["video_denoise"]), tk.BooleanVar(value=cfg["preview"])
+    v_auto_enhance = tk.BooleanVar(value=cfg.get("auto_enhance", True))
+    v_wind_reduction = tk.BooleanVar(value=cfg.get("wind_reduction", True))
+    v_auto_tune = tk.BooleanVar(value=cfg.get("auto_tune", True))
     v_br = tk.StringVar(value=cfg["bitrate"])
     v_status = tk.StringVar(value="พร้อมทำงาน")
     v_time = tk.StringVar(value="")
@@ -382,50 +740,66 @@ def main():
         value="พร้อมอัดเสียง" if rec_inst and rec_inst.is_available()[0] else "ไมโครโฟนไม่พร้อมใช้งาน")
     v_rec_dur = tk.StringVar(value="00:00")
 
-    f_rec = ttk.LabelFrame(root, text="1. อัดเสียงจากไมโครโฟน (บันทึกเสียงสด)")
+    theme_button = ttk.Button(content, width=15, takefocus=False)
+    theme_button.pack(anchor="e", padx=10, pady=(0, 2))
+    f_rec = ttk.LabelFrame(content, text="1. อัดเสียงจากไมโครโฟน (บันทึกเสียงสด)")
     f_rec.pack(fill="x", **pad)
     f_rec.columnconfigure(2, weight=1)
 
     r_row1 = ttk.Frame(f_rec)
     r_row1.pack(fill="x", padx=6, pady=3)
 
-    b_rec_start = ttk.Button(r_row1, text="🔴 เริ่มอัดเสียง")
+    b_rec_start = ttk.Button(r_row1, text="●  เริ่มอัดเสียง", width=13)
     b_rec_start.pack(side="left", padx=(0, 4))
-    b_rec_stop = ttk.Button(r_row1, text="⏹️ หยุด", state="disabled")
+    b_rec_stop = ttk.Button(r_row1, text="■  หยุด", width=8, state="disabled")
     b_rec_stop.pack(side="left", padx=4)
-    b_rec_play = ttk.Button(r_row1, text="▶️ ฟังเสียงที่อัด", state="disabled")
+    b_rec_play = ttk.Button(r_row1, text="▶  ฟังเสียงที่อัด", width=13, state="disabled")
     b_rec_play.pack(side="left", padx=4)
-    b_rec_use = ttk.Button(r_row1, text="⚡ นำเข้าเพื่อตัด noise ทันที", state="disabled")
+    b_rec_use = ttk.Button(r_row1, text="นำเข้าเพื่อลด noise", width=16, state="disabled")
     b_rec_use.pack(side="left", padx=4)
-    b_rec_save = ttk.Button(r_row1, text="💾 บันทึกเสียงดิบ...", state="disabled")
+    b_rec_save = ttk.Button(r_row1, text="บันทึกเสียงดิบ...", width=16, state="disabled")
     b_rec_save.pack(side="left", padx=4)
-
-    v_rec_autogain = tk.BooleanVar(value=True)
-    cb_autogain = ttk.Checkbutton(
-        r_row1,
-        text="⚡ เพิ่มความดังไมค์อัตโนมัติ (Auto Gain)",
-        variable=v_rec_autogain,
-    )
-    cb_autogain.pack(side="left", padx=(10, 4))
 
     r_row2 = ttk.Frame(f_rec)
     r_row2.pack(fill="x", padx=6, pady=(0, 4))
+    v_rec_autogain = tk.BooleanVar(value=True)
+    autogain_box = ttk.Frame(r_row2)
+    autogain_box.pack(side="left", padx=(4, 10))
+    check_canvas = tk.Canvas(autogain_box, width=26, height=26, highlightthickness=0,
+                             borderwidth=0, takefocus=True, cursor="hand2")
+    check_canvas.pack(side="left", padx=(0, 4))
+    autogain_label = ttk.Label(autogain_box, text="เพิ่มระดับเสียงไมค์อัตโนมัติ (Auto Gain)",
+                               cursor="hand2")
+    autogain_label.pack(side="left")
+
+    def toggle_autogain(_event=None):
+        v_rec_autogain.set(not v_rec_autogain.get())
+        draw_check_indicator(check_canvas, v_rec_autogain.get(), THEMES[state["theme"]])
+        return "break"
+
+    check_canvas.bind("<Button-1>", toggle_autogain)
+    autogain_label.bind("<Button-1>", toggle_autogain)
+    check_canvas.bind("<space>", toggle_autogain)
     ttk.Label(r_row2, text="ระดับเสียงไมค์:").pack(side="left")
     rec_meter = ttk.Progressbar(r_row2, maximum=100, length=120)
     rec_meter.pack(side="left", padx=6)
     ttk.Label(r_row2, text="เวลาอัด:").pack(side="left", padx=(6, 2))
     ttk.Label(r_row2, textvariable=v_rec_dur, font=("TkDefaultFont", 9, "bold")).pack(side="left")
     ttk.Label(r_row2, text=" | ").pack(side="left", padx=4)
-    ttk.Label(r_row2, textvariable=v_rec_status, foreground="#555").pack(side="left")
+    ttk.Label(r_row2, textvariable=v_rec_status, style="Muted.TLabel").pack(side="left")
 
     def update_rec_ui():
         if rec_inst and rec_inst.is_recording:
             dur = rec_inst.get_duration()
             mins, secs = divmod(int(dur), 60)
-            v_rec_dur.set(f"{mins:02d}:{secs:02d}")
+            duration_text = f"{mins:02d}:{secs:02d}"
+            if v_rec_dur.get() != duration_text:
+                v_rec_dur.set(duration_text)
             peak, _ = rec_inst.get_levels()
-            rec_meter["value"] = min(100, int(peak * 250))
-            root.after(100, update_rec_ui)
+            meter_value = min(100, int(peak * 250))
+            if rec_meter["value"] != meter_value:
+                rec_meter["value"] = meter_value
+            root.after(150, update_rec_ui)
         else:
             rec_meter["value"] = 0
 
@@ -500,7 +874,7 @@ def main():
     b_rec_save.config(command=on_rec_save)
 
     # ---- 2. เลือกไฟล์และโฟลเดอร์บันทึก
-    f = ttk.LabelFrame(root, text="2. เลือกไฟล์และโฟลเดอร์บันทึก")
+    f = ttk.LabelFrame(content, text="2. เลือกไฟล์และโฟลเดอร์บันทึก")
     f.pack(fill="x", **pad)
     f.columnconfigure(1, weight=1)
     ttk.Label(f, text="ไฟล์ต้นฉบับ").grid(row=0, column=0, sticky="w", padx=6, pady=3)
@@ -511,7 +885,7 @@ def main():
 
     ttk.Label(f, text="บันทึกไฟล์เป็น").grid(row=2, column=0, sticky="w", padx=6, pady=3)
     ttk.Entry(f, textvariable=v_out).grid(row=2, column=1, sticky="ew", padx=6)
-    ttk.Label(f, textvariable=v_info, foreground="#666").grid(
+    ttk.Label(f, textvariable=v_info, style="Muted.TLabel").grid(
         row=3, column=1, sticky="w", padx=6, pady=(0, 4))
 
     def pick_in():
@@ -551,12 +925,12 @@ def main():
             v_out.set(p)
             v_out_dir.set(os.path.dirname(p))
 
-    ttk.Button(f, text="เลือกไฟล์...", command=pick_in).grid(row=0, column=2, padx=6)
-    ttk.Button(f, text="เลือกโฟลเดอร์...", command=pick_dir).grid(row=1, column=2, padx=6)
-    ttk.Button(f, text="ระบุชื่อ...", command=pick_out).grid(row=2, column=2, padx=6)
+    ttk.Button(f, text="เลือกไฟล์...", command=pick_in, width=16).grid(row=0, column=2, padx=6)
+    ttk.Button(f, text="เลือกโฟลเดอร์...", command=pick_dir, width=16).grid(row=1, column=2, padx=6)
+    ttk.Button(f, text="ระบุชื่อ...", command=pick_out, width=16).grid(row=2, column=2, padx=6)
 
     # ---- 3. ตั้งค่า (สร้างจากรายการใน denoise_common)
-    s = ttk.LabelFrame(root, text="3. ตั้งค่าการลด noise")
+    s = ttk.LabelFrame(content, text="3. ตั้งค่าการลด noise")
     s.pack(fill="x", **pad)
     s.columnconfigure(1, weight=1)
 
@@ -639,7 +1013,7 @@ def main():
                       font=(ui_font, 9), highlightthickness=0, bd=1,
                       sliderrelief="raised", sliderlength=20, activebackground="#3b82f6")
         sc.grid(row=row, column=1, sticky="ew", padx=6)
-        ht = ttk.Label(s, text=spec["hint"], foreground="#555")
+        ht = ttk.Label(s, text=spec["hint"], style="Muted.TLabel", wraplength=240)
         ht.grid(row=row, column=2, sticky="w", padx=6)
         sliders.append(sc)
         opt_rows[key] = (lb, sc, ht)
@@ -655,11 +1029,24 @@ def main():
                 textvariable=v_nd).pack(side="left", padx=4)
 
     o2 = ttk.Frame(s)
-    o2.grid(row=nrow + 1, column=0, columnspan=3, sticky="w", padx=6, pady=3)
-    ttk.Checkbutton(o2, text="ลด noise ภาพด้วย (ช้าลงมาก)", variable=v_vid).pack(side="left")
-    ttk.Label(o2, text="   บิตเรตเสียง").pack(side="left")
-    ttk.Combobox(o2, textvariable=v_br, values=C.BITRATES,
-                 width=6, state="readonly").pack(side="left", padx=4)
+    o2.grid(row=nrow + 1, column=0, columnspan=3, sticky="ew", padx=6, pady=3)
+    o2.columnconfigure(0, weight=1)
+    ttk.Checkbutton(o2, text="ลด noise ภาพด้วย (ช้าลงมาก)", variable=v_vid).grid(
+        row=3, column=0, sticky="w", pady=2)
+    b_auto_enhance = ttk.Checkbutton(o2, text="เน้นเสียงพูด ลดเสียงช่วงพัก/ปรับความดังอัตโนมัติ",
+                                     variable=v_auto_enhance)
+    b_auto_enhance.grid(row=1, column=0, sticky="w", pady=2)
+    b_wind_reduction = ttk.Checkbutton(o2, text="ลดลมไมค์ (ตัดเสียงทุ้มต่ำกว่า 150 Hz)",
+                                       variable=v_wind_reduction)
+    b_wind_reduction.grid(row=2, column=0, sticky="w", pady=2)
+    b_auto_tune = ttk.Checkbutton(o2, text="วิเคราะห์เสียงและปรับค่าอัตโนมัติ (Spectral)",
+                                  variable=v_auto_tune)
+    b_auto_tune.grid(row=0, column=0, sticky="w", pady=2)
+    bitrate_row = ttk.Frame(o2)
+    bitrate_row.grid(row=4, column=0, sticky="w", pady=2)
+    ttk.Label(bitrate_row, text="บิตเรตเสียง").pack(side="left")
+    ttk.Combobox(bitrate_row, textvariable=v_br, values=C.BITRATES,
+                 width=8, state="readonly").pack(side="left", padx=6)
     ttk.Checkbutton(s, text=f"ทดสอบเฉพาะ {PREVIEW_SECONDS // 60} นาทีแรกก่อน (แนะนำ ใช้ปรับค่าให้เร็ว)",
                     variable=v_prev,
                     command=lambda: v_in.get() and v_out.set(
@@ -672,16 +1059,17 @@ def main():
             for w in widgets:
                 (w.grid if key in spec.get("options", ()) else w.grid_remove)()
         (nr.grid if spec.get("noise_profile") else nr.grid_remove)()
+        b_auto_tune.config(state="normal" if spec.get("noise_profile") else "disabled")
 
     v_engine.trace_add("write", on_engine_change)
 
     # ---- 4. ประมวลผล
-    r = ttk.LabelFrame(root, text="4. ประมวลผล")
+    r = ttk.LabelFrame(content, text="4. ประมวลผล")
     r.pack(fill="both", expand=True, **pad)
     bar = ttk.Progressbar(r, maximum=100)
     bar.pack(fill="x", padx=6, pady=(6, 2))
     ttk.Label(r, textvariable=v_status).pack(anchor="w", padx=6)
-    ttk.Label(r, textvariable=v_time, foreground="#555").pack(anchor="w", padx=6)
+    ttk.Label(r, textvariable=v_time, style="Muted.TLabel").pack(anchor="w", padx=6)
     logbox = tk.Text(r, height=6, state="disabled", wrap="word",
                      font=(mono_font, 9), bg="#f8fafc", fg="#1e293b",
                      relief="solid", bd=1, padx=6, pady=4)
@@ -697,15 +1085,15 @@ def main():
 
     bf = ttk.Frame(r)
     bf.pack(fill="x", padx=6, pady=(0, 6))
-    b_start = ttk.Button(bf, text="เริ่มลด noise")
+    b_start = ttk.Button(bf, text="▶  เริ่มลด noise")
     b_start.pack(side="left")
-    b_cancel = ttk.Button(bf, text="ยกเลิก", state="disabled")
+    b_cancel = ttk.Button(bf, text="■  ยกเลิก", state="disabled")
     b_cancel.pack(side="left", padx=6)
     b_check = ttk.Button(bf, text="ตรวจระบบ")
     b_check.pack(side="left")
     b_folder = ttk.Button(bf, text="เปิดโฟลเดอร์บันทึก", state="disabled")
     b_folder.pack(side="right")
-    b_play = ttk.Button(bf, text="เปิดไฟล์ผลลัพธ์", state="disabled")
+    b_play = ttk.Button(bf, text="▶  เปิดไฟล์ผลลัพธ์", state="disabled")
     b_play.pack(side="right", padx=6)
 
     def set_running(running):
@@ -717,13 +1105,20 @@ def main():
         for eid, rb in radios.items():
             rb.config(state="disabled" if running else ("normal" if state.get("avail", {}).get(eid, True) else "disabled"))
         b_psave.config(state="disabled" if running else "normal")
+        b_auto_enhance.config(state="disabled" if running else "normal")
+        b_wind_reduction.config(state="disabled" if running else "normal")
+        can_auto_tune = C.ENGINES.get(v_engine.get(), {}).get("noise_profile", False)
+        b_auto_tune.config(state="disabled" if running or not can_auto_tune else "normal")
 
     def collect():
         return {"engine": v_engine.get(),
                 "values": {k: v.get() for k, v in v_vals.items()},
                 "bitrate": v_br.get(), "noise_manual": v_manual.get(),
                 "noise_start": v_ns.get(), "noise_dur": v_nd.get(),
-                "video_denoise": v_vid.get(), "preview": v_prev.get()}
+                "video_denoise": v_vid.get(), "preview": v_prev.get(),
+                "auto_enhance": v_auto_enhance.get(),
+                "wind_reduction": v_wind_reduction.get(),
+                "auto_tune": v_auto_tune.get()}
 
     def store_settings():
         try:
@@ -731,9 +1126,13 @@ def main():
         except tk.TclError:
             return
         C.save_settings({
-            "settings_version": C.SETTINGS_VERSION, "engine": o["engine"],
+            "settings_version": C.SETTINGS_VERSION, "theme": state["theme"],
+            "engine": o["engine"],
             "preset": v_preset.get(), "values": o["values"],
             "video_denoise": o["video_denoise"], "preview": o["preview"],
+            "auto_enhance": o["auto_enhance"],
+            "wind_reduction": o["wind_reduction"],
+            "auto_tune": o["auto_tune"],
             "noise_manual": o["noise_manual"], "noise_start": o["noise_start"],
             "noise_dur": o["noise_dur"], "bitrate": o["bitrate"],
             "last_dir": cfg["last_dir"], "output_dir": v_out_dir.get()})
@@ -800,7 +1199,10 @@ def main():
         win.title("ตรวจระบบ")
         win.geometry("760x360")
         win.transient(root)
-        box = tk.Text(win, wrap="none", font=("Courier New", 10) if os.name == "nt" else "TkFixedFont")
+        colors = THEMES[state["theme"]]
+        win.configure(background=colors["bg"])
+        box = tk.Text(win, wrap="none", font=("Courier New", 10) if os.name == "nt" else "TkFixedFont",
+                      bg=colors["log"], fg=colors["text"], insertbackground=colors["text"])
         box.insert("1.0", text)
         box.config(state="disabled")
         box.pack(fill="both", expand=True, padx=8, pady=8)
@@ -853,11 +1255,16 @@ def main():
         except queue.Empty:
             pass
         if last:
-            bar["value"] = last[1]
-            v_status.set(last[2])
+            if bar["value"] != last[1]:
+                bar["value"] = last[1]
+            if v_status.get() != last[2]:
+                v_status.set(last[2])
         if state["job"]:
-            v_time.set(f"ใช้เวลาไปแล้ว {int(time.time() - state['t0'])} วินาที")
-        root.after(150, poll)
+            elapsed = int(time.time() - state["t0"])
+            if state.get("last_elapsed") != elapsed:
+                v_time.set(f"ใช้เวลาไปแล้ว {elapsed} วินาที")
+                state["last_elapsed"] = elapsed
+        root.after(120 if state["job"] else 500, poll)
 
     def finish(kind, msg):
         set_running(False)
@@ -885,6 +1292,15 @@ def main():
     b_folder.config(command=lambda: open_path(os.path.dirname(os.path.abspath(state["out"]))))
     b_play.config(command=lambda: open_path(state["out"]))
 
+    def toggle_theme():
+        state["theme"] = "dark" if state["theme"] == "light" else "light"
+        apply_ui_theme(root, canvas, content, state["theme"], logbox, sliders,
+                       theme_button, check_canvas, v_rec_autogain, b_folder,
+                       scrollbar)
+        store_settings()
+
+    theme_button.config(command=toggle_theme)
+
     def on_close():
         if state["job"] and not messagebox.askyesno("ปิดโปรแกรม", "กำลังประมวลผลอยู่ ต้องการยกเลิกและปิดหรือไม่?"):
             return
@@ -894,8 +1310,33 @@ def main():
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
+
+    def refresh_titlebar_on_map(event):
+        if event.widget is root:
+            root.after_idle(lambda: apply_windows_chrome(
+                root, state["theme"], THEMES[state["theme"]]))
+
+    root.bind("<Map>", refresh_titlebar_on_map, add="+")
     refresh_presets()
     on_engine_change()
+    apply_ui_theme(root, canvas, content, state["theme"], logbox, sliders,
+                   theme_button, check_canvas, v_rec_autogain, b_folder,
+                   scrollbar)
+
+    # Finish initial geometry and theme while hidden so the first visible frame
+    # does not expose the platform's default black/white erase background.
+    root.update_idletasks()
+    if scroll_cache["width_job"] is not None:
+        root.after_cancel(scroll_cache["width_job"])
+        scroll_cache["width_job"] = None
+    initial_width = canvas.winfo_width()
+    if initial_width > 1:
+        canvas.itemconfigure(content_id, width=initial_width)
+        scroll_cache["width"] = initial_width
+        scroll_cache["pending_width"] = initial_width
+        update_scroll_region()
+        root.update_idletasks()
+    root.deiconify()
 
     def warm():                                  # ตรวจ ffmpeg เบื้องหลังตอนเปิดโปรแกรม
         C.ffmpeg_caps()

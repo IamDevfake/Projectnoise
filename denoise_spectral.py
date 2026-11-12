@@ -50,10 +50,12 @@ def decode_audio(path, sr, ch, highpass=0, start=None, dur=None, block_sec=10):
     if highpass > 0:
         cmd += ["-af", f"highpass=f={highpass}"]
     cmd += ["-ac", str(ch), "-ar", str(sr), "-f", "f32le", "pipe:1"]
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, **C.hide_console())
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                         **C.hide_console())
     bpf = 4 * ch
     blk = int(block_sec * sr) * bpf
     rem = b""
+    completed = False
     try:
         while True:
             data = p.stdout.read(blk)
@@ -64,9 +66,14 @@ def decode_audio(path, sr, ch, highpass=0, start=None, dur=None, block_sec=10):
             rem = data[n:]
             if n:
                 yield np.frombuffer(data[:n], dtype=np.float32).reshape(-1, ch).T
+        completed = True
     finally:
         p.stdout.close()
-        p.wait()
+        if not completed and p.poll() is None:
+            p.terminate()
+        rc = p.wait()
+    if completed and rc != 0:
+        raise RuntimeError(f"ffmpeg อ่านเสียงไม่สำเร็จ (รหัส {rc})")
 
 
 # ------------------------------------------------------------- STFT helpers
@@ -119,9 +126,10 @@ def estimate_noise(path, sr, ch, dur, highpass, noise_start, noise_dur, rep):
             block_energy.append(e[idx].mean())
             block_rms.append(float(np.sqrt(np.mean(seg ** 2))))
             done += 1
-        if dur:
+        if dur and rep is not None:
             rep.update(1, 2, done / dur * 100)
-    rep.finish(1, 2, time.time() - t0)
+    if rep is not None:
+        rep.finish(1, 2, time.time() - t0)
     if not block_spec:
         sys.exit("ไฟล์เสียงสั้นเกินไปสำหรับประเมิน noise")
 
@@ -154,6 +162,8 @@ class StreamingDenoiser:
         self.tail = np.zeros((ch, pre), np.float32)
         self.skip = pre
         self.prev_g = np.ones(N_FFT // 2 + 1, np.float32)
+        # Keep two power frames so smoothing is continuous across decoded chunks.
+        self.power_history = None
         self.real_in = 0
         self.emitted = 0
 
@@ -175,10 +185,17 @@ class StreamingDenoiser:
         fr = frames_of(np.ascontiguousarray(self.buf))
         spec = np.fft.rfft(fr * WIN, axis=-1)
         P = spec.real ** 2 + spec.imag ** 2
-        # ทำให้ค่าประมาณกำลังสัญญาณเรียบขึ้น (ลดความแกว่งของ noise -> ลด musical noise)
+        # Smooth across frequency, then apply a causal time smoother. Keeping the
+        # previous two frames avoids a gain discontinuity at each decoder chunk.
         P = uniform_filter1d(P, size=5, axis=2)
-        if nf > 2:
-            P = uniform_filter1d(P, size=3, axis=1)
+        if self.power_history is None:
+            history = np.repeat(P[:, :1, :], 2, axis=1)
+        else:
+            history = self.power_history
+        P_with_history = np.concatenate([history, P], axis=1)
+        P = (P_with_history[:, :-2, :] + P_with_history[:, 1:-1, :] +
+             P_with_history[:, 2:, :]) / 3.0
+        self.power_history = P_with_history[:, -2:, :].copy()
         raw_g = np.sqrt(np.maximum(1.0 - self.alpha * self.noise / (P + 1e-20), 0.0))
         g = np.maximum(raw_g, self.floor).mean(axis=0)          # link ช่อง -> (nf, bins)
         g = uniform_filter1d(g, size=3, axis=1)
@@ -206,10 +223,45 @@ class StreamingDenoiser:
 
 # ------------------------------------------------------------------ runner
 def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
-    noise, noise_rms_db = estimate_noise(a.input, sr, ch, dur, a.highpass,
+    reduction, alpha, release = float(a.reduction), float(a.alpha), float(a.release)
+    highpass = float(a.highpass)
+    if getattr(a, "auto_tune", False):
+        # Analyze the unfiltered noise profile first, so low-frequency wind is
+        # visible to the detector before any high-pass is applied.
+        raw_noise, raw_noise_db = estimate_noise(a.input, sr, ch, dur, 0,
+                                                 a.noise_start, a.noise_dur, None)
+        freq = np.fft.rfftfreq(N_FFT, 1.0 / sr)
+        profile = np.maximum(raw_noise, 0).mean(axis=0)
+        total_power = float(profile.sum()) + 1e-20
+        low_ratio = float(profile[freq <= 160].sum()) / total_power
+        if getattr(a, "wind_reduction", False):
+            wind_cut = 180 if low_ratio >= 0.40 else 150 if low_ratio >= 0.20 else 120
+            highpass = max(highpass, float(wind_cut))
+
+        # Select a conservative strength from the measured ambient noise level.
+        if raw_noise_db > -32:
+            reduction = min(26.0, max(22.0, reduction))
+            alpha = min(2.5, max(2.1, alpha))
+            release = max(0.90, release)
+        elif raw_noise_db > -43:
+            reduction = min(23.0, max(18.0, reduction))
+            alpha = min(2.3, max(1.8, alpha))
+            release = max(0.92, release)
+        else:
+            reduction = min(18.0, max(14.0, reduction))
+            alpha = min(1.9, max(1.4, alpha))
+            release = max(0.94, release)
+        print("ปรับค่าอัตโนมัติ: noise %.1f dB, ย่านต่ำ %.0f%%, high-pass %.0f Hz, "
+              "ลด noise %.0f dB, alpha %.1f" %
+              (raw_noise_db, low_ratio * 100, highpass, reduction, alpha),
+              file=sys.stderr, flush=True)
+    elif getattr(a, "wind_reduction", False):
+        highpass = max(highpass, 150.0)
+
+    noise, noise_rms_db = estimate_noise(a.input, sr, ch, dur, highpass,
                                          a.noise_start, a.noise_dur, rep)
     gate_val = getattr(a, "gate", 1.0)
-    den = StreamingDenoiser(noise, ch, a.reduction, a.alpha, a.release, gate=gate_val)
+    den = StreamingDenoiser(noise, ch, reduction, alpha, release, gate=gate_val)
 
     # คำนวณตัวคูณ linear จาก volume (dB)
     vol_db = getattr(a, "volume", 0.0)
@@ -218,7 +270,7 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
     # Pipeline: Python spectral denoise → ffmpeg [agate (soft expander) → volume → alimiter]
     # รัน agate ที่ระดับเสียงธรรมชาติต้นฉบับ (ก่อน volume boost) เพื่อไม่ให้ตัดคำพูด
     #
-    # ⚠️ ปัญหาเสียงกระตุก (stutter): ratio=4 / attack=15ms ทำให้ agate ก้าวร้าวเกินไป
+    # ปัญหาเสียงกระตุกเกิดได้เมื่อ expander ตัดช่วงพักแรงเกินไป
     #   - ช่วงพักระหว่างคำพูดมักมีระดับเสียงเพียง -30 ถึง -40 dB
     #   - threshold -22 dB ทับกับช่วงพักดังกล่าว → gate ปิด-เปิดบ่อย → กระตุก
     #
@@ -238,9 +290,25 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
         af_parts.append(
             f"agate=threshold={thr_lin:.6f}:ratio=1.5:knee=4.0:attack=30:release=400:range=0.12"
         )
+    elif getattr(a, "auto_enhance", False) and C.has_filter("agate"):
+        # Gently tuck down residual room/wind noise between phrases before
+        # leveling speech; long release and a soft knee avoid chopping words.
+        thr_db = min(-38.0, max(-55.0, noise_rms_db + 2.0))
+        thr_lin = 10.0 ** (thr_db / 20.0)
+        af_parts.append(
+            f"agate=threshold={thr_lin:.6f}:ratio=1.3:knee=8:attack=25:release=700:range=0.18"
+        )
     if vol_db != 0.0:
         af_parts.append(f"volume={vol_db}dB")
+    if getattr(a, "auto_enhance", False):
+        if C.has_filter("equalizer"):
+            af_parts.append("equalizer=f=2500:t=q:w=1.2:g=1.0")
+        if C.has_filter("dynaudnorm"):
+            # Conservative gain cap limits noise pumping in pauses.
+            af_parts.append("dynaudnorm=f=300:g=11:p=0.92:m=3")
     if vol_db > 0.0 and C.has_filter("alimiter"):
+        af_parts.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
+    elif getattr(a, "auto_enhance", False) and C.has_filter("alimiter"):
         af_parts.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
 
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostdin", "-i", a.input,
@@ -257,7 +325,7 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
 
     t0, done = time.time(), 0
     try:
-        for chunk in decode_audio(a.input, sr, ch, a.highpass):
+        for chunk in decode_audio(a.input, sr, ch, highpass):
             out = den.feed(np.ascontiguousarray(chunk))
             enc.stdin.write(np.ascontiguousarray(out.T).tobytes())
             done += chunk.shape[1]
@@ -270,6 +338,15 @@ def run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
         enc.stdin.close()
     except BrokenPipeError:
         pass
+    except Exception:
+        try:
+            enc.stdin.close()
+        except (OSError, ValueError):
+            pass
+        if enc.poll() is None:
+            enc.terminate()
+        enc.wait()
+        raise
     rc = enc.wait()
     rep.finish(2, 2, time.time() - t0)
     return rc

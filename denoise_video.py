@@ -44,8 +44,9 @@ def _run_spectral(a, dur, sr, ch, has_video, tmp_err, rep):
 def _run_ffmpeg(a, dur, sr, ch, has_video, tmp_err, rep):
     nr = min(97.0, max(0.01, a.reduction))
     af = []
-    if a.highpass > 0:
-        af.append(f"highpass=f={a.highpass}")
+    highpass = max(float(a.highpass), 150.0) if getattr(a, "wind_reduction", False) else a.highpass
+    if highpass > 0:
+        af.append(f"highpass=f={highpass}")
     af.append(f"afftdn=nr={nr}:nf=-45:tn=1")
     gate_val = getattr(a, "gate", 1.0)
     if gate_val > 1.0 and C.has_filter("agate"):
@@ -56,11 +57,21 @@ def _run_ffmpeg(a, dur, sr, ch, has_video, tmp_err, rep):
         thr_db = min(-28.0, max(-55.0, -34.0 + (gate_val - 1.0) * 4.0))
         thr_lin = 10.0 ** (thr_db / 20.0)
         af.append(f"agate=threshold={thr_lin:.6f}:ratio=1.5:knee=4.0:attack=30:release=400:range=0.12")
+    elif getattr(a, "auto_enhance", False) and C.has_filter("agate"):
+        # Mild expander before normalization keeps pauses and room tails lower.
+        af.append("agate=threshold=0.008:ratio=1.3:knee=8:attack=25:release=700:range=0.18")
     vol_db = getattr(a, "volume", 0.0)
     if vol_db != 0.0:
         af.append(f"volume={vol_db}dB")
+    if getattr(a, "auto_enhance", False):
+        if C.has_filter("equalizer"):
+            af.append("equalizer=f=2500:t=q:w=1.2:g=1.0")
+        if C.has_filter("dynaudnorm"):
+            af.append("dynaudnorm=f=300:g=11:p=0.92:m=3")
     if vol_db > 0.0 and C.has_filter("alimiter"):
         # ป้องกันเสียงแตก (clipping/distortion) เมื่อเร่งเสียงสูง
+        af.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
+    elif getattr(a, "auto_enhance", False) and C.has_filter("alimiter"):
         af.append("alimiter=limit=0.95:level=0:attack=5:release=50:asc=1")
     cmd = [C.find_tool("ffmpeg") or "ffmpeg", "-y", "-v", "error", "-nostats",
            "-progress", "pipe:1", "-nostdin", "-i", a.input,
@@ -111,13 +122,19 @@ def build_parser():
     ap.add_argument("--volume", type=float, default=0.0,
                     help="เพิ่ม/ลดความดัง เป็น dB (0 = เท่าเดิม, +6 = ดังขึ้น 2 เท่า)")
     ap.add_argument("--gate", type=float, default=1.0,
-                    help="Noise gate: อัตราส่วน P/noise ต่ำกว่านี้ตัดทิ้ง (0=ปิด, 1=ปกติ, 2=แรง)")
+                    help="Soft gate: 1=ปิด (แนะนำถ้าเสียงกระตุก), มากกว่า 1=ลดเสียงช่วงเงียบเพิ่ม")
     ap.add_argument("--noise-start", type=float, default=None,
                     help="วินาทีเริ่มต้นของช่วงที่เป็น noise ล้วน (ไม่ระบุ = ตรวจจับอัตโนมัติ)")
     ap.add_argument("--noise-dur", type=float, default=2.0,
                     help="ความยาวช่วง noise (วินาที) ใช้คู่กับ --noise-start")
     ap.add_argument("--video-denoise", action="store_true",
                     help="ลด noise ภาพด้วย hqdn3d (re-encode x264, ช้าลงมาก)")
+    ap.add_argument("--auto-enhance", action="store_true",
+                    help="เน้นเสียงพูด ลดเสียงช่วงพักแบบนุ่ม และปรับความดังอัตโนมัติ")
+    ap.add_argument("--wind-reduction", action="store_true",
+                    help="ลดเสียงลมทุ้มด้วย high-pass อย่างน้อย 150 Hz")
+    ap.add_argument("--auto-tune", action="store_true",
+                    help="วิเคราะห์ noise floor แล้วเลือกความแรง denoise และจุดตัดลมอัตโนมัติ")
     ap.add_argument("--audio-bitrate", default="192k")
     ap.add_argument("--progress-json", action="store_true",
                     help="รายงานความคืบหน้าเป็นบรรทัด JSON (สำหรับหน้าจอ)")

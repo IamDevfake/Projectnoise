@@ -18,7 +18,7 @@ import sys
 
 APP_NAME = "DenoiseVideo"
 VERSION = "1.1.0"
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 5
 MIN_PYTHON = (3, 8)
 PROGRESS_TAG = "@@PROGRESS "
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -43,9 +43,9 @@ OPTIONS = {
     "volume": {"label": "เพิ่ม/ลดความดัง (dB)", "flag": "--volume",
                "min": -20, "max": 20, "step": 0.5, "default": 0,
                "hint": "0 = เท่าเดิม, +6 = ดังขึ้น 2 เท่า, -6 = เบาลง"},
-    "gate": {"label": "Noise Gate (ตัดแข็ง)", "flag": "--gate",
+    "gate": {"label": "Soft Gate (ตัวขยายเสียงเบา)", "flag": "--gate",
              "min": 0.0, "max": 3.0, "step": 0.1, "default": 1.0,
-             "hint": "0 = ปิด, 1 = ปกติ, 2 = แรง — ตัดบิน FFT ที่ยังถูก noise ครอง"},
+             "hint": "1 = ปิด (แนะนำถ้าเสียงกระตุก), มากกว่า 1 = ลดเสียงช่วงเงียบเพิ่ม"},
 }
 
 # ------------------------------------------------------------------ เอนจิน
@@ -68,11 +68,11 @@ ENGINES = {
 DEFAULT_ENGINE = "spectral"
 
 BUILTIN_PRESETS = {
-    "ทั่วไป (พัดลม/แอร์/ฟู่)": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 70, "volume": 0, "gate": 1.2},
-    "มีเสียงหึ่ง/ลมความถี่ต่ำ": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 100, "volume": 0, "gate": 1.2},
-    "ลด noise แรง": {"reduction": 26, "alpha": 3.0, "release": 0.85, "highpass": 80, "volume": 0, "gate": 1.5},
+    "ทั่วไป (พัดลม/แอร์/ฟู่)": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 70, "volume": 0, "gate": 1.0},
+    "มีเสียงหึ่ง/ลมความถี่ต่ำ": {"reduction": 20, "alpha": 2.2, "release": 0.85, "highpass": 100, "volume": 0, "gate": 1.0},
+    "ลด noise แรง": {"reduction": 26, "alpha": 3.0, "release": 0.85, "highpass": 80, "volume": 0, "gate": 1.0},
     "รักษาเสียงพูด (นุ่มนวล)": {"reduction": 14, "alpha": 1.6, "release": 0.90, "highpass": 50, "volume": 0, "gate": 0.8},
-    "ลด noise + เพิ่มเสียงให้ดังขึ้น": {"reduction": 22, "alpha": 2.5, "release": 0.85, "highpass": 70, "volume": 6, "gate": 1.5},
+    "ลด noise + เพิ่มเสียงให้ดังขึ้น": {"reduction": 22, "alpha": 2.5, "release": 0.85, "highpass": 70, "volume": 6, "gate": 1.0},
 }
 
 
@@ -172,11 +172,15 @@ def save_user_presets(user):
 def default_settings():
     return {
         "settings_version": SETTINGS_VERSION,
+        "theme": "light",
         "engine": DEFAULT_ENGINE,
         "preset": next(iter(BUILTIN_PRESETS)),
         "values": default_values(),
         "video_denoise": False,
         "preview": False,
+        "auto_enhance": True,
+        "wind_reduction": True,
+        "auto_tune": True,
         "noise_manual": False,
         "noise_start": 0.0,
         "noise_dur": 2.0,
@@ -211,10 +215,13 @@ def migrate_settings(raw):
         ver += 1
     if raw.get("engine") in ENGINES:
         s["engine"] = raw["engine"]
+    if raw.get("theme") in ("light", "dark"):
+        s["theme"] = raw["theme"]
     if isinstance(raw.get("preset"), str):
         s["preset"] = raw["preset"]
     s["values"].update(clean_values(raw.get("values")))
-    for k in ("video_denoise", "preview", "noise_manual"):
+    for k in ("video_denoise", "preview", "noise_manual", "auto_enhance",
+              "wind_reduction", "auto_tune"):
         if isinstance(raw.get(k), bool):
             s[k] = raw[k]
     s["noise_start"] = _num(raw.get("noise_start"), 0.0, 0, 1e6)
